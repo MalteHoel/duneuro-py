@@ -213,10 +213,8 @@ void register_eeg_driver_interface(py::module& m)
         if (info.strides[1] / sizeof(double) != 1)
           throw std::runtime_error("Supporting only row major format");
 
-        duneuro::DenseMatrix<double> transferMatrix(info.shape[0], info.shape[1]);
-        double* ptr = static_cast<double*>(info.ptr);
-        std::copy(ptr, ptr + info.shape[0] * info.shape[1], transferMatrix.data());
-
+        duneuro::DenseMatrix<double> transferMatrix(info.shape[0], info.shape[1],
+                                                    static_cast<double*>(info.ptr));
         return interface.solve(transferMatrix, dipole);
       });
   ;
