@@ -1,0 +1,10 @@
+################################
+# Dune module information file #
+################################
+
+#Name of the module
+Module: duneuro-py
+Version: 0.1
+Maintainer: andreas.nuessing@uni-muenster.de
+#depending on
+Depends: dune-common duneuro
