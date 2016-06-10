@@ -9,10 +9,10 @@
 #include <dune/common/parametertree.hh>
 
 #include <duneuro/common/dense_matrix.hh>
-#include <duneuro/eeg/eeg_driver_factory.hh>
-#include <duneuro/eeg/eeg_driver_interface.hh>
 #include <duneuro/io/dipole_reader.hh>
 #include <duneuro/io/field_vector_reader.hh>
+#include <duneuro/meeg/meeg_driver_factory.hh>
+#include <duneuro/meeg/meeg_driver_interface.hh>
 
 namespace py = pybind11;
 // translate a dune exception to std::exception since the latter is automatically converted to a
@@ -128,7 +128,7 @@ void register_function(py::module& m)
   });
 }
 
-class PyEEGDriverInterface
+class PyMEEGDriverInterface
 {
 public:
   duneuro::Function makeDomainFunction() const
@@ -136,70 +136,100 @@ public:
     PYBIND11_OVERLOAD_PURE(duneuro::Function, duneuro::EEGDriverInterface, makeDomainFunction);
   }
 
-  void solve(const duneuro::EEGDriverInterface::DipoleType& dipole, duneuro::Function& solution)
+  void solveEEGForward(const duneuro::MEEGDriverInterface::DipoleType& dipole,
+                       duneuro::Function& solution)
   {
-    PYBIND11_OVERLOAD_PURE(void, duneuro::EEGDriverInterface, solve, dipole, solution);
+    PYBIND11_OVERLOAD_PURE(void, duneuro::MEEGDriverInterface, solveEEGForward, dipole, solution);
+  }
+
+  std::vector<double> solveMEGForward(const duneuro::Function& eegSolution)
+  {
+    PYBIND11_OVERLOAD_PURE(std::vector<double>, duneuro::MEEGDriverInterface, solveMEGForward,
+                           eegSolution);
   }
 
   void write(const Dune::ParameterTree& config, const duneuro::Function& solution) const
   {
-    PYBIND11_OVERLOAD_PURE(void, duneuro::EEGDriverInterface, write, config, solution);
+    PYBIND11_OVERLOAD_PURE(void, duneuro::MEEGDriverInterface, write, config, solution);
   }
 
-  void setElectrodes(const std::vector<duneuro::EEGDriverInterface::CoordinateType>& electrodes)
+  void setElectrodes(const std::vector<duneuro::MEEGDriverInterface::CoordinateType>& electrodes)
   {
     PYBIND11_OVERLOAD_PURE(void, duneuro::EEGDriverInterface, setElectrodes, electrodes);
   }
 
   std::vector<double> evaluateAtElectrodes(const duneuro::Function& solution) const
   {
-    PYBIND11_OVERLOAD_PURE(std::vector<double>, duneuro::EEGDriverInterface, evaluateAtElectrodes,
+    PYBIND11_OVERLOAD_PURE(std::vector<double>, duneuro::MEEGDriverInterface, evaluateAtElectrodes,
                            solution);
   }
 
-  duneuro::DenseMatrix<double>* computeTransferMatrix()
+  void setCoilsAndProjections(
+      const std::vector<duneuro::MEEGDriverInterface::CoordinateType>& coils,
+      const std::vector<std::vector<duneuro::MEEGDriverInterface::CoordinateType>>& projections)
   {
-    PYBIND11_OVERLOAD_PURE(duneuro::DenseMatrix<double>*, duneuro::EEGDriverInterface,
-                           computeTransferMatrix);
+    PYBIND11_OVERLOAD_PURE(void, duneuro::MEEGDriverInterface, setCoilsAndProjections, coils,
+                           projections);
   }
 
-  std::vector<double> solve(const duneuro::DenseMatrix<double>& transferMatrix,
-                            const duneuro::EEGDriverInterface::DipoleType& dipole)
+  duneuro::DenseMatrix<double>* computeEEGTransferMatrix()
   {
-    PYBIND11_OVERLOAD_PURE(std::vector<double>, duneuro::EEGDriverInterface, solve, transferMatrix,
-                           dipole);
+    PYBIND11_OVERLOAD_PURE(duneuro::DenseMatrix<double>*, duneuro::MEEGDriverInterface,
+                           computeEEGTransferMatrix);
+  }
+
+  duneuro::DenseMatrix<double>* computeMEGTransferMatrix()
+  {
+    PYBIND11_OVERLOAD_PURE(duneuro::DenseMatrix<double>*, duneuro::MEEGDriverInterface,
+                           computeMEGTransferMatrix);
+  }
+
+  std::vector<double> applyTransfer(const duneuro::DenseMatrix<double>& transferMatrix,
+                                    const duneuro::MEEGDriverInterface::DipoleType& dipole)
+  {
+    PYBIND11_OVERLOAD_PURE(std::vector<double>, duneuro::MEEGDriverInterface, applyTransfer,
+                           transferMatrix, dipole);
   }
 };
 
-void register_eeg_driver_interface(py::module& m)
+void register_meeg_driver_interface(py::module& m)
 {
-  py::class_<PyEEGDriverInterface> driver(m, "EEGDriver");
-  driver.alias<duneuro::EEGDriverInterface>()
+  py::class_<PyMEEGDriverInterface> driver(m, "MEEGDriver");
+  driver.alias<duneuro::MEEGDriverInterface>()
       .def(py::init<>())
-      .def("makeDomainFunction", &duneuro::EEGDriverInterface::makeDomainFunction)
-      .def("solve",
-           [](duneuro::EEGDriverInterface& interface, const duneuro::Dipole<double, 3>& dipole,
-              duneuro::Function& solution) { interface.solve(dipole, solution); })
-      .def("solve",
-           [](duneuro::EEGDriverInterface& interface, const duneuro::Dipole<double, 3>& dipole) {
+      .def("makeDomainFunction", &duneuro::MEEGDriverInterface::makeDomainFunction)
+      .def("solveEEGForward",
+           [](duneuro::MEEGDriverInterface& interface, const duneuro::Dipole<double, 3>& dipole,
+              duneuro::Function& solution) { interface.solveEEGForward(dipole, solution); })
+      .def("solveEEGForward",
+           [](duneuro::MEEGDriverInterface& interface, const duneuro::Dipole<double, 3>& dipole) {
              auto solution = interface.makeDomainFunction();
-             interface.solve(dipole, solution);
+             interface.solveEEGForward(dipole, solution);
              return solution;
            })
+      .def("solveMEGForward",
+           [](duneuro::MEEGDriverInterface& interface, const duneuro::Function& eegSolution) {
+             return interface.solveMEGForward(eegSolution);
+           })
       .def("write",
-           [](duneuro::EEGDriverInterface& interface, const py::dict& config,
+           [](duneuro::MEEGDriverInterface& interface, const py::dict& config,
               const duneuro::Function& solution) {
              auto ptree = dictToParameterTree(config);
              interface.write(ptree, solution);
            })
-      .def("setElectrodes", &duneuro::EEGDriverInterface::setElectrodes)
-      .def("evaluateAtElectrodes", &duneuro::EEGDriverInterface::evaluateAtElectrodes)
-      .def("computeTransferMatrix",
-           [](duneuro::EEGDriverInterface& interface) {
-             return interface.computeTransferMatrix().release();
+      .def("setElectrodes", &duneuro::MEEGDriverInterface::setElectrodes)
+      .def("setCoilsAndProjections", &duneuro::MEEGDriverInterface::setCoilsAndProjections)
+      .def("evaluateAtElectrodes", &duneuro::MEEGDriverInterface::evaluateAtElectrodes)
+      .def("computeEEGTransferMatrix",
+           [](duneuro::MEEGDriverInterface& interface) {
+             return interface.computeEEGTransferMatrix().release();
            })
-      .def("solve", [](duneuro::EEGDriverInterface& interface, py::buffer& buffer,
-                       const duneuro::EEGDriverInterface::DipoleType& dipole) {
+      .def("computeMEGTransferMatrix",
+           [](duneuro::MEEGDriverInterface& interface) {
+             return interface.computeMEGTransferMatrix().release();
+           })
+      .def("applyTransfer", [](duneuro::MEEGDriverInterface& interface, py::buffer& buffer,
+                               const duneuro::MEEGDriverInterface::DipoleType& dipole) {
         /* Request a buffer descriptor from Python */
         py::buffer_info info = buffer.request();
 
@@ -215,17 +245,17 @@ void register_eeg_driver_interface(py::module& m)
 
         duneuro::DenseMatrix<double> transferMatrix(info.shape[0], info.shape[1],
                                                     static_cast<double*>(info.ptr));
-        return interface.solve(transferMatrix, dipole);
+        return interface.applyTransfer(transferMatrix, dipole);
       });
   ;
 }
 
-void register_eeg_driver_factory(py::module& m)
+void register_meeg_driver_factory(py::module& m)
 {
-  m.def("make_eeg_driver", [](const py::dict& dict) {
+  m.def("make_meeg_driver", [](const py::dict& dict) {
     try {
       auto ptree = dictToParameterTree(dict);
-      return duneuro::EEGDriverFactory::make_eeg_driver(ptree).release();
+      return duneuro::MEEGDriverFactory::make_meeg_driver(ptree).release();
     } catch (Dune::Exception& ex) {
       throw DubioException(ex);
     }
@@ -260,9 +290,9 @@ PYBIND11_PLUGIN(duneuropy)
 
   register_function(m);
 
-  register_eeg_driver_interface(m);
+  register_meeg_driver_interface(m);
 
-  register_eeg_driver_factory(m);
+  register_meeg_driver_factory(m);
 
   register_dense_matrix<double>(m);
 
