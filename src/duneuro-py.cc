@@ -11,6 +11,7 @@
 #include <duneuro/common/dense_matrix.hh>
 #include <duneuro/io/dipole_reader.hh>
 #include <duneuro/io/field_vector_reader.hh>
+#include <duneuro/io/projections_reader.hh>
 #include <duneuro/meeg/meeg_driver_factory.hh>
 #include <duneuro/meeg/meeg_driver_interface.hh>
 
@@ -121,6 +122,15 @@ void register_field_vector_reader(py::module& m)
   });
 }
 
+template <class T, int dim>
+void register_projections_reader(py::module& m)
+{
+  auto name = "read_" + std::to_string(dim) + "d_projections";
+  m.def(name.c_str(), [](const std::string& filename) {
+    return duneuro::ProjectionsReader<T, dim>::read(filename);
+  });
+}
+
 void register_function(py::module& m)
 {
   py::class_<duneuro::Function>(m, "Function").def("__init__", [](duneuro::Function& instance) {
@@ -209,7 +219,11 @@ void register_meeg_driver_interface(py::module& m)
            })
       .def("solveMEGForward",
            [](duneuro::MEEGDriverInterface& interface, const duneuro::Function& eegSolution) {
-             return interface.solveMEGForward(eegSolution);
+             try {
+               return interface.solveMEGForward(eegSolution);
+             } catch (Dune::Exception& ex) {
+               throw DubioException(ex);
+             }
            })
       .def("write",
            [](duneuro::MEEGDriverInterface& interface, const py::dict& config,
@@ -218,7 +232,17 @@ void register_meeg_driver_interface(py::module& m)
              interface.write(ptree, solution);
            })
       .def("setElectrodes", &duneuro::MEEGDriverInterface::setElectrodes)
-      .def("setCoilsAndProjections", &duneuro::MEEGDriverInterface::setCoilsAndProjections)
+      .def("setCoilsAndProjections",
+           [](duneuro::MEEGDriverInterface& interface,
+              const std::vector<duneuro::MEEGDriverInterface::CoordinateType>& coils,
+              const std::vector<std::vector<duneuro::MEEGDriverInterface::CoordinateType>>&
+                  projections) {
+             try {
+               interface.setCoilsAndProjections(coils, projections);
+             } catch (Dune::Exception& ex) {
+               throw DubioException(ex);
+             }
+           })
       .def("evaluateAtElectrodes", &duneuro::MEEGDriverInterface::evaluateAtElectrodes)
       .def("computeEEGTransferMatrix",
            [](duneuro::MEEGDriverInterface& interface) {
@@ -287,6 +311,7 @@ PYBIND11_PLUGIN(duneuropy)
   register_read_dipoles<double, 3>(m);
 
   register_field_vector_reader<double, 3>(m);
+  register_projections_reader<double, 3>(m);
 
   register_function(m);
 
