@@ -308,14 +308,16 @@ void register_meeg_driver_interface(py::module& m)
   py::class_<PyMEEGDriverInterface> driver(m, "MEEGDriver");
   driver.alias<duneuro::MEEGDriverInterface>()
       .def(py::init<>())
-      .def("makeDomainFunction", &duneuro::MEEGDriverInterface::makeDomainFunction)
+      .def("makeDomainFunction", &duneuro::MEEGDriverInterface::makeDomainFunction,
+           "create a domain function")
       .def("solveEEGForward",
            [](duneuro::MEEGDriverInterface& interface, const duneuro::Dipole<double, 3>& dipole,
               duneuro::Function& solution) {
              return void_call([&](duneuro::DataTree dtree) {
                interface.solveEEGForward(dipole, solution, dtree);
              });
-           })
+           },
+           "solve the eeg forward problem and store the result in the given function")
       .def("solveEEGForward",
            [](duneuro::MEEGDriverInterface& interface, const duneuro::Dipole<double, 3>& dipole) {
              return output_call([&](duneuro::DataTree dtree) {
@@ -324,7 +326,8 @@ void register_meeg_driver_interface(py::module& m)
                interface.solveEEGForward(dipole, *solution, dtree);
                return std::move(solution);
              });
-           })
+           },
+           "solve the eeg forward problem and return the solution")
       .def("solveMEGForward",
            [](duneuro::MEEGDriverInterface& interface, const duneuro::Function& eegSolution) {
              try {
@@ -335,14 +338,17 @@ void register_meeg_driver_interface(py::module& m)
              } catch (Dune::Exception& ex) {
                throw DubioException(ex);
              }
-           })
+           },
+           "solve the meg forward problem and return the solution")
       .def("write",
            [](duneuro::MEEGDriverInterface& interface, const py::dict& config,
               const duneuro::Function& solution) {
              auto ptree = dictToParameterTree(config);
              interface.write(ptree, solution);
            })
-      .def("setElectrodes", &duneuro::MEEGDriverInterface::setElectrodes)
+      .def(
+          "setElectrodes", &duneuro::MEEGDriverInterface::setElectrodes,
+          "set the electrodes. subsequent calls to evaluateAtElectrodes will use these electrodes.")
       .def("setCoilsAndProjections",
            [](duneuro::MEEGDriverInterface& interface,
               const std::vector<duneuro::MEEGDriverInterface::CoordinateType>& coils,
@@ -353,55 +359,66 @@ void register_meeg_driver_interface(py::module& m)
              } catch (Dune::Exception& ex) {
                throw DubioException(ex);
              }
-           })
-      .def("evaluateAtElectrodes", &duneuro::MEEGDriverInterface::evaluateAtElectrodes)
+           },
+           "set coils and projections for meg. subsequent calls to solveMEGForward will use these "
+           "coils and projections")
+      .def("evaluateAtElectrodes", &duneuro::MEEGDriverInterface::evaluateAtElectrodes,
+           "evaluate the given function at the set electrodes")
       .def("computeEEGTransferMatrix",
            [](duneuro::MEEGDriverInterface& interface) {
              return output_call([&](duneuro::DataTree dtree) {
                return interface.computeEEGTransferMatrix(dtree);
              });
-           })
+           },
+           "compute the eeg transfer matrix using the set electrodes")
       .def("computeMEGTransferMatrix",
            [](duneuro::MEEGDriverInterface& interface) {
              return output_call([&](duneuro::DataTree dtree) {
                return interface.computeMEGTransferMatrix(dtree);
              });
-           })
-      .def("applyTransfer", [](duneuro::MEEGDriverInterface& interface, py::buffer& buffer,
-                               const duneuro::MEEGDriverInterface::DipoleType& dipole) {
-        return output_call([&](duneuro::DataTree dtree) {
-          /* Request a buffer descriptor from Python */
-          py::buffer_info info = buffer.request();
+           },
+           "compute the meg transfer matrix using the set coils and projections")
+      .def("applyTransfer",
+           [](duneuro::MEEGDriverInterface& interface, py::buffer buffer,
+              const duneuro::MEEGDriverInterface::DipoleType& dipole) {
+             return output_call([&](duneuro::DataTree dtree) {
+               /* Request a buffer descriptor from Python */
+               py::buffer_info info = buffer.request();
 
-          /* Some sanity checks ... */
-          if (info.format != py::format_descriptor<double>::value())
-            throw std::runtime_error("Incompatible format: expected a double array!");
+               /* Some sanity checks ... */
+               if (info.format != py::format_descriptor<double>::value())
+                 throw std::runtime_error("Incompatible format: expected a double array!");
 
-          if (info.ndim != 2)
-            throw std::runtime_error("Incompatible buffer dimension!");
+               if (info.ndim != 2)
+                 throw std::runtime_error("Incompatible buffer dimension!");
 
-          if (info.strides[1] / sizeof(double) != 1)
-            throw std::runtime_error("Supporting only row major format");
+               if (info.strides[1] / sizeof(double) != 1)
+                 throw std::runtime_error("Supporting only row major format");
 
-          duneuro::DenseMatrix<double> transferMatrix(info.shape[0], info.shape[1],
-                                                      static_cast<double*>(info.ptr));
-          return Dune::Std::make_unique<std::vector<double>>(
-              interface.applyTransfer(transferMatrix, dipole, dtree));
-        });
-      });
+               duneuro::DenseMatrix<double> transferMatrix(info.shape[0], info.shape[1],
+                                                           static_cast<double*>(info.ptr));
+               return Dune::Std::make_unique<std::vector<double>>(
+                   interface.applyTransfer(transferMatrix, dipole, dtree));
+             });
+           },
+           "apply the given transfer matrix. note that since this method can work with eeg and "
+           "meg, no mean is subtracted. For the subtraction approach, this will only compute the "
+           "numerical correction component");
   ;
 }
 
 void register_meeg_driver_factory(py::module& m)
 {
-  m.def("make_meeg_driver", [](const py::dict& dict) {
-    try {
-      auto ptree = dictToParameterTree(dict);
-      return duneuro::MEEGDriverFactory::make_meeg_driver(ptree).release();
-    } catch (Dune::Exception& ex) {
-      throw DubioException(ex);
-    }
-  });
+  m.def("make_meeg_driver",
+        [](const py::dict& dict) {
+          try {
+            auto ptree = dictToParameterTree(dict);
+            return duneuro::MEEGDriverFactory::make_meeg_driver(ptree).release();
+          } catch (Dune::Exception& ex) {
+            throw DubioException(ex);
+          }
+        },
+        "create a driver class for solving eeg and meg problems");
 }
 
 template <class T>
@@ -422,14 +439,16 @@ void register_dense_matrix(py::module& m)
 
 void register_points_on_sphere(py::module& m)
 {
-  m.def("generate_points_on_sphere", [](const py::dict& d) {
-    auto ptree = dictToParameterTree(d);
-    try {
-      return duneuro::generate_points_on_sphere<double, 3>(ptree);
-    } catch (Dune::Exception& ex) {
-      throw DubioException(ex);
-    }
-  });
+  m.def("generate_points_on_sphere",
+        [](const py::dict& d) {
+          auto ptree = dictToParameterTree(d);
+          try {
+            return duneuro::generate_points_on_sphere<double, 3>(ptree);
+          } catch (Dune::Exception& ex) {
+            throw DubioException(ex);
+          }
+        },
+        "generate approximately uniformly distributed points on a sphere");
 }
 
 void register_analytical_solution(py::module& m)
