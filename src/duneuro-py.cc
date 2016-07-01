@@ -118,6 +118,25 @@ void register_field_vector(py::module& m)
             {sizeof(T)});
       })
       .def(py::init<T>())
+      .def("__init__",
+           [](FieldVector& instance, py::buffer buffer) {
+             /* Request a buffer descriptor from Python */
+             py::buffer_info info = buffer.request();
+
+             /* Some sanity checks ... */
+             if (info.format != py::format_descriptor<T>::value())
+               throw std::runtime_error("Incompatible format: expected a T array!");
+
+             if (info.ndim != 1)
+               throw std::runtime_error("Incompatible buffer dimension!");
+
+             if (info.shape[0] != dim)
+               throw std::runtime_error("Incompartible buffer size");
+
+             T* ptr = static_cast<T*>(info.ptr);
+
+             std::copy(ptr, ptr + dim, instance.begin());
+           })
       .def(py::self += py::self)
       .def(py::self -= py::self)
       .def(py::self += T())
