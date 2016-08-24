@@ -152,6 +152,7 @@ static inline Dune::ParameterTree dictToParameterTree(py::dict dict)
   return tree;
 }
 
+#if HAVE_DUNE_UDG
 static duneuro::UDGMEEGDriverData extractUDGDataFromMainDict(py::dict d)
 {
   duneuro::UDGMEEGDriverData data;
@@ -191,6 +192,7 @@ static duneuro::UDGMEEGDriverData extractUDGDataFromMainDict(py::dict d)
   }
   return data;
 }
+#endif
 
 // create basic binding for a dune field vector
 template <class T, int dim>
@@ -294,10 +296,11 @@ class PyMEEGDriverInterface
 public:
   explicit PyMEEGDriverInterface(py::dict d)
   {
-    auto data = extractUDGDataFromMainDict(d);
-    dictToParameterTree(d).report(std::cout);
-    driver_ = duneuro::MEEGDriverFactory::make_meeg_driver(dictToParameterTree(d),
-                                                           duneuro::MEEGDriverData{data});
+    duneuro::MEEGDriverData data;
+#if HAVE_DUNE_UDG
+    data.udgData = extractUDGDataFromMainDict(d);
+#endif
+    driver_ = duneuro::MEEGDriverFactory::make_meeg_driver(dictToParameterTree(d), data);
   }
 
   std::unique_ptr<duneuro::Function> makeDomainFunction() const
