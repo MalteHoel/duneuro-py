@@ -161,7 +161,7 @@ static duneuro::UDGMEEGDriverData extractUDGDataFromMainDict(py::dict d)
     auto list = domainDict[py::str("level_sets")].cast<py::list>();
     for (auto lvlst : list) {
       auto levelsetDict = domainDict[lvlst].cast<py::dict>();
-      if (levelsetDict[py::str("type")] == py::str("image")) {
+      if (levelsetDict[py::str("type")].cast<py::str>() == py::str("image")) {
         for (auto item : levelsetDict) {
           if (item.first.cast<std::string>() == "data") {
             std::string type = item.second.get_type().attr("__name__").cast<std::string>();
