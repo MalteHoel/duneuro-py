@@ -6,3 +6,5 @@ else()
   message(FATAL_ERROR "pybind11 not found in external. did you call git submodule update?")
 endif()
 include_directories(${PYTHON_INCLUDE_DIR})
+
+find_package(Sphinx)
