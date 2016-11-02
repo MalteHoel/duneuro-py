@@ -157,7 +157,7 @@ static inline Dune::ParameterTree dictToParameterTree(py::dict dict)
 static duneuro::UDGMEEGDriverData extractUDGDataFromMainDict(py::dict d)
 {
   duneuro::UDGMEEGDriverData data;
-  try {
+  if (d.contains("domain") && d.contains("level_sets")) {
     auto domainDict = d[py::str("domain")].cast<py::dict>();
     auto list = domainDict[py::str("level_sets")].cast<py::list>();
     for (auto lvlst : list) {
@@ -188,8 +188,6 @@ static duneuro::UDGMEEGDriverData extractUDGDataFromMainDict(py::dict d)
         }
       }
     }
-  } catch (py::index_error& ex) {
-  } catch (py::cast_error& ex) {
   }
   return data;
 }
