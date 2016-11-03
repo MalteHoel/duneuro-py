@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -151,6 +152,41 @@ static inline Dune::ParameterTree dictToParameterTree(py::dict dict)
     tree[k.first] = k.second;
   }
   return tree;
+}
+
+static void extractFittedDataFromMainDict(py::dict d, duneuro::FittedMEEGDriverData& data)
+{
+  if (d.contains("volume_conductor")) {
+    auto volume_conductor_dict = d["volume_conductor"].cast<py::dict>();
+    if (volume_conductor_dict.contains("grid") && volume_conductor_dict.contains("tensors")) {
+      auto grid_dict = volume_conductor_dict["grid"].cast<py::dict>();
+      auto tensor_dict = volume_conductor_dict["tensors"].cast<py::dict>();
+      if (grid_dict.contains("nodes") && grid_dict.contains("elements")
+          && tensor_dict.contains("labels") && tensor_dict.contains("conductivities")) {
+        std::cout << "casting nodes" << std::endl;
+        for (const auto& n : grid_dict["nodes"]) {
+          auto arr = n.cast<std::vector<double>>();
+          if (arr.size() != 3)
+            DUNE_THROW(Dune::Exception, "each node has to have 3 entries");
+          data.nodes.push_back({arr[0], arr[1], arr[2]});
+        }
+        for (const auto& e : grid_dict["elements"]) {
+          data.elements.push_back(e.cast<std::vector<unsigned int>>());
+          for (const auto& ei : data.elements.back()) {
+            if (ei >= data.nodes.size()) {
+              DUNE_THROW(Dune::Exception, "node index " << ei << " out of bounds ("
+                                                        << data.nodes.size() << ")");
+            }
+          }
+        }
+        data.labels = tensor_dict["labels"].cast<std::vector<int>>();
+        data.conductivities = tensor_dict["conductivities"].cast<std::vector<double>>();
+        if (data.labels.size() != data.elements.size()) {
+          DUNE_THROW(Dune::Exception, "labels and elements have to have the same size");
+        }
+      }
+    }
+  }
 }
 
 #if HAVE_DUNE_UDG
@@ -352,6 +388,7 @@ public:
     duneuro::MEEGDriverData data;
 #if HAVE_DUNE_UDG
     data.udgData = extractUDGDataFromMainDict(d);
+    extractFittedDataFromMainDict(d, data.fittedData);
 #endif
     driver_ = duneuro::MEEGDriverFactory::make_meeg_driver(dictToParameterTree(d), data);
   }
