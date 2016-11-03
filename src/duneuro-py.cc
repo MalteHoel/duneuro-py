@@ -213,6 +213,7 @@ void register_field_vector(py::module& m)
       })
       .def(py::init<T>())
       .def("__init__", [](FieldVector& instance, py::buffer buffer) {
+        new (&instance) FieldVector();
         /* Request a buffer descriptor from Python */
         py::buffer_info info = buffer.request();
 
@@ -255,15 +256,29 @@ void register_dipole(py::module& m)
       m, "Dipole", "a class representing a mathematical dipole consisting of a position and moment")
       .def(py::init<FieldVector, FieldVector>(), "create a dipole from its position and moment",
            py::arg("position"), py::arg("moment"))
+      .def("__init__",
+           [](Dipole& instance, py::handle pos, py::handle mom) {
+             auto position = pos.cast<std::vector<double>>();
+             auto moment = mom.cast<std::vector<double>>();
+             if (position.size() != dim)
+               DUNE_THROW(Dune::Exception, "position has to have " << dim << " entries");
+             if (moment.size() != dim)
+               DUNE_THROW(Dune::Exception, "moment has to have " << dim << " entries");
+             FieldVector vpos, vmom;
+             std::copy(position.begin(), position.end(), vpos.begin());
+             std::copy(moment.begin(), moment.end(), vmom.begin());
+             new (&instance) Dipole(vpos, vmom);
+           },
+           "create a dipole from its position and moment", py::arg("position"), py::arg("moment"))
       .def("position", &Dipole::position, "return the dipole position",
            py::return_value_policy::reference_internal)
       .def("moment", &Dipole::moment, "return the dipole moment",
-           py::return_value_policy::reference_internal);
-  //.def("__str__", [](const Dipole& dip) {
-  // std::stringstream sstr;
-  // sstr << "position: " << dip.position() << " moment: " << dip.moment();
-  // return sstr.str();
-  //});
+           py::return_value_policy::reference_internal)
+      .def("__str__", [](const Dipole& dip) {
+        std::stringstream sstr;
+        sstr << "Dipole[position: " << dip.position() << " moment: " << dip.moment() << "]";
+        return sstr.str();
+      });
 }
 
 template <class T, int dim>
