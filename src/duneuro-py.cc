@@ -625,7 +625,10 @@ static inline void register_point_vtk_writer(py::module& m)
       .def(py::init<const std::vector<Dune::FieldVector<ctype, dim>>&, bool>())
       .def(py::init<const duneuro::Dipole<ctype, dim>&>())
       .def("addVectorData", &Writer::addVectorData, "add vector data to the given points.")
-      .def("addScalarData", &Writer::addScalarData, "add scalar data to the given points.");
+      .def("addScalarData", &Writer::addScalarData, "add scalar data to the given points.")
+      .def("write",
+           [](const Writer& instance, const std::string& filename) { instance.write(filename); },
+           "write the data to vtk");
 }
 
 PYBIND11_PLUGIN(duneuropy)
