@@ -518,8 +518,25 @@ the real driver to be used can be configured using the dictionary.
 
     solver_type = cg | dg
     element_type = tetrahedron | hexahedron
+
+  For a fitted driver, the mesh can either be read from file, or provided directly from python.
+  To read the mesh from a file, set
+
+  .. code-block:: ini
+
     volume_conductor.tensors.filename = string
     volume_conductor.grid.filename = string
+
+  To provide the mesh directly, set
+
+  .. code-block:: ini
+
+    volume_conductor.tensors.labels = list<int>
+    volume_conductor.tensors.conductivities = list<double>
+    volume_conductor.grid.nodes = list<vector<double>>
+    volume_conductor.grid.elements = list<list<int>>
+
+  If both variants are present, the mesh from the python datastructures will be preferred.
 
   For the discontinuous Galerkin driver (i.e. ``solver_type == dg``), further options are available
 
