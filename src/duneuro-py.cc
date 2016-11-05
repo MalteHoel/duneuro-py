@@ -102,20 +102,15 @@ static inline std::string py_to_string(py::handle handle)
     return sstr.str();
   } else if (type == "bool")
     return std::to_string(handle.cast<bool>());
-  else if (type == "list") {
-    std::vector<std::string> entries;
-    for (auto it = handle.begin(); it != handle.end(); ++it)
-      entries.push_back(py_to_string(*it));
-    if (entries.size() > 0) {
-      std::stringstream str;
-      str << entries[0];
-      for (unsigned int i = 1; i < entries.size(); ++i) {
-        str << " " << entries[i];
-      }
-      return str.str();
-    } else {
-      return "";
+  else if ((type == "list") || (type == "tuple")) {
+    std::stringstream str;
+    unsigned int i = 0;
+    for (auto it = handle.begin(); it != handle.end(); ++it, ++i) {
+      if (i > 0)
+        str << " ";
+      str << py_to_string(*it);
     }
+    return str.str();
   }
   DUNE_THROW(Dune::Exception, "type \"" << type << "\" not supported");
 }
