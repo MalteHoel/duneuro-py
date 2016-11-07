@@ -4,7 +4,9 @@ Python documentation of the duneuropy module
 The main driver class ``MEEGDriver``
 ====================================
 .. currentmodule:: duneuropy
-.. autoclass:: MEEGDriver
+.. autoclass:: MEEGDriver3d
+  :members:
+.. autoclass:: MEEGDriver2d
   :members:
 
 the duneuropy-module
