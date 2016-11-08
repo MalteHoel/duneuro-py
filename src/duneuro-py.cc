@@ -188,36 +188,33 @@ static void extractFittedDataFromMainDict(py::dict d, duneuro::FittedMEEGDriverD
 }
 
 #if HAVE_DUNE_UDG
-static duneuro::UDGMEEGDriverData extractUDGDataFromMainDict(py::dict d)
+template <int dim>
+static duneuro::UDGMEEGDriverData<dim> extractUDGDataFromMainDict(py::dict d)
 {
-  duneuro::UDGMEEGDriverData data;
+  duneuro::UDGMEEGDriverData<dim> data;
   if (d.contains("domain") && d.contains("level_sets")) {
-    auto domainDict = d[py::str("domain")].cast<py::dict>();
-    auto list = domainDict[py::str("level_sets")].cast<py::list>();
+    auto domainDict = d["domain"].cast<py::dict>();
+    auto list = domainDict["level_sets"].cast<py::list>();
     for (auto lvlst : list) {
       auto levelsetDict = domainDict[lvlst].cast<py::dict>();
-      if (levelsetDict[py::str("type")].cast<py::str>() == py::str("image")) {
+      if (levelsetDict["type"].cast<py::str>() == py::str("image")) {
         for (auto item : levelsetDict) {
-          if (item.first.cast<std::string>() == "data") {
-            std::string type = item.second.get_type().attr("__name__").cast<std::string>();
+          if (item.first.cast<py::str>() == py::str("data")) {
             auto buffer = item.second.cast<py::buffer>();
             py::buffer_info info = buffer.request();
-            if (info.ndim != 3) {
-              DUNE_THROW(Dune::Exception, "only 3d level sets are supported");
-            }
             if (info.format != py::format_descriptor<double>::value) {
               DUNE_THROW(Dune::Exception, "only float level sets are supported. expected "
                                               << py::format_descriptor<double>::value << " got "
                                               << info.format);
             }
-            duneuro::SimpleStructuredGrid<3> grid({static_cast<unsigned int>(info.shape[0]),
-                                                   static_cast<unsigned int>(info.shape[1]),
-                                                   static_cast<unsigned int>(info.shape[2])});
+            std::array<unsigned int, dim> elementsInDim;
+            std::copy(info.shape.begin(), info.shape.end(), elementsInDim.begin());
+            duneuro::SimpleStructuredGrid<dim> grid(elementsInDim);
             double* ptr = reinterpret_cast<double*>(info.ptr);
             auto imagedata = std::make_shared<std::vector<double>>(ptr, ptr + info.size);
             data.levelSetData.images.push_back(
-                std::make_shared<duneuro::Image<double, 3>>(imagedata, grid));
-            levelsetDict[py::str("image_index")] = py::int_(data.levelSetData.images.size() - 1);
+                std::make_shared<duneuro::Image<double, dim>>(imagedata, grid));
+            levelsetDict["image_index"] = py::int_(data.levelSetData.images.size() - 1);
           }
         }
       }
@@ -321,7 +318,9 @@ void register_dipole(py::module& m)
 template <class T, int dim>
 void register_read_dipoles(py::module& m)
 {
-  m.def("read_dipoles",
+  std::stringstream str;
+  str << "read_dipoles_" << dim << "d";
+  m.def(str.str().c_str(),
         [](const std::string& filename) { return duneuro::DipoleReader<T, dim>::read(filename); },
         R"pydoc(
 read dipoles from a file
@@ -339,7 +338,7 @@ for a file with two dipoles.
 template <class T, int dim>
 void register_field_vector_reader(py::module& m)
 {
-  auto name = "read_" + std::to_string(dim) + "d_field_vectors";
+  auto name = "read_field_vectors_" + std::to_string(dim) + "d";
   m.def(name.c_str(),
         [](const std::string& filename) {
           return duneuro::FieldVectorReader<T, dim>::read(filename);
@@ -359,7 +358,7 @@ for a file with two field vectors.
 template <class T, int dim>
 void register_projections_reader(py::module& m)
 {
-  auto name = "read_" + std::to_string(dim) + "d_projections";
+  auto name = "read_projections_" + std::to_string(dim) + "d";
   m.def(name.c_str(),
         [](const std::string& filename) {
           return duneuro::ProjectionsReader<T, dim>::read(filename);
@@ -391,7 +390,7 @@ public:
   {
     duneuro::MEEGDriverData<dim> data;
 #if HAVE_DUNE_UDG
-    data.udgData = extractUDGDataFromMainDict(d);
+    data.udgData = extractUDGDataFromMainDict<dim>(d);
     extractFittedDataFromMainDict(d, data.fittedData);
 #endif
     driver_ = duneuro::MEEGDriverFactory<dim>::make_meeg_driver(dictToParameterTree(d), data);
