@@ -667,7 +667,7 @@ generate approximately uniformly distributed points on a sphere
 
 static inline void register_analytical_solution(py::module& m)
 {
-  m.def("analytical_solution",
+  m.def("analytical_solution_3d",
         [](const std::vector<Dune::FieldVector<double, 3>>& electrodes,
            const duneuro::Dipole<double, 3>& dipole, py::dict config) {
           return duneuro::compute_analytic_solution(electrodes, dipole,
