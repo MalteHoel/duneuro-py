@@ -243,38 +243,34 @@ void register_field_vector(py::module& m)
             {sizeof(T)});
       })
       .def(py::init<T>())
-      .def("__init__", [](FieldVector& instance, py::buffer buffer) {
-        new (&instance) FieldVector();
-        /* Request a buffer descriptor from Python */
-        py::buffer_info info = buffer.request();
-
-        /* Some sanity checks ... */
-        if (info.format != py::format_descriptor<T>::value)
-          throw std::runtime_error("Incompatible format: expected a T array!");
-
-        if (info.ndim != 1)
-          throw std::runtime_error("Incompatible buffer dimension!");
-
-        if (info.shape[0] != dim)
-          throw std::runtime_error("Incompartible buffer size");
-
-        T* ptr = static_cast<T*>(info.ptr);
-
-        std::copy(ptr, ptr + dim, instance.begin());
+      .def("__init__",
+           [](FieldVector& instance, py::array_t<T> array) {
+             if (array.size() != dim)
+               DUNE_THROW(Dune::Exception, "array has to have size " << dim << " but got "
+                                                                     << array.size());
+             if (array.ndim() != 1)
+               DUNE_THROW(Dune::Exception, "array has to have dim " << 1 << " but got "
+                                                                    << array.ndim());
+             new (&instance) FieldVector();
+             std::copy(array.data(), array.data() + dim, instance.begin());
+           })
+      .def(py::self += py::self)
+      .def(py::self -= py::self)
+      .def(py::self += T())
+      .def(py::self -= T())
+      .def(py::self *= T())
+      .def(py::self /= T())
+      .def("__len__", &FieldVector::size)
+      .def("__getitem__",
+           [](const FieldVector& instance, std::size_t i) {
+             return assert(i < dim);
+             instance[i];
+           })
+      .def("__str__", [](const FieldVector& fv) {
+        std::stringstream sstr;
+        sstr << "FieldVector" << dim << "d[" << fv << "]";
+        return sstr.str();
       });
-  //.def(py::self += py::self)
-  //.def(py::self -= py::self)
-  //.def(py::self += T())
-  //.def(py::self -= T())
-  //.def(py::self *= T())
-  //.def(py::self /= T())
-  //.def("__len__", &FieldVector::size)
-  //.def("__getitem__", [](FieldVector& instance, std::size_t i) { return instance[i]; })
-  //.def("__str__", [](const FieldVector& fv) {
-  // std::stringstream sstr;
-  // sstr << fv;
-  // return sstr.str();
-  //});
 }
 
 // create bindings for a dipole
@@ -291,16 +287,14 @@ void register_dipole(py::module& m)
       .def(py::init<FieldVector, FieldVector>(), "create a dipole from its position and moment",
            py::arg("position"), py::arg("moment"))
       .def("__init__",
-           [](Dipole& instance, py::handle pos, py::handle mom) {
-             auto position = pos.cast<std::vector<double>>();
-             auto moment = mom.cast<std::vector<double>>();
-             if (position.size() != dim)
+           [](Dipole& instance, py::array_t<T> pos, py::array_t<T> mom) {
+             if (pos.size() != dim || pos.ndim() != 1)
                DUNE_THROW(Dune::Exception, "position has to have " << dim << " entries");
-             if (moment.size() != dim)
+             if (mom.size() != dim || pos.ndim() != 1)
                DUNE_THROW(Dune::Exception, "moment has to have " << dim << " entries");
              FieldVector vpos, vmom;
-             std::copy(position.begin(), position.end(), vpos.begin());
-             std::copy(moment.begin(), moment.end(), vmom.begin());
+             std::copy(pos.data(), pos.data() + dim, vpos.begin());
+             std::copy(mom.data(), mom.data() + dim, vmom.begin());
              new (&instance) Dipole(vpos, vmom);
            },
            "create a dipole from its position and moment", py::arg("position"), py::arg("moment"))
@@ -310,7 +304,7 @@ void register_dipole(py::module& m)
            py::return_value_policy::reference_internal)
       .def("__str__", [](const Dipole& dip) {
         std::stringstream sstr;
-        sstr << "Dipole[position: " << dip.position() << " moment: " << dip.moment() << "]";
+        sstr << "Dipole[position: [" << dip.position() << "] moment: [" << dip.moment() << "]]";
         return sstr.str();
       });
 }
