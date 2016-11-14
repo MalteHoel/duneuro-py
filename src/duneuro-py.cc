@@ -149,7 +149,8 @@ static inline Dune::ParameterTree dictToParameterTree(py::dict dict)
   return tree;
 }
 
-static void extractFittedDataFromMainDict(py::dict d, duneuro::FittedMEEGDriverData& data)
+template <int dim>
+static void extractFittedDataFromMainDict(py::dict d, duneuro::FittedMEEGDriverData<dim>& data)
 {
   if (d.contains("volume_conductor")) {
     auto volume_conductor_dict = d["volume_conductor"].cast<py::dict>();
@@ -161,9 +162,11 @@ static void extractFittedDataFromMainDict(py::dict d, duneuro::FittedMEEGDriverD
         std::cout << "casting nodes" << std::endl;
         for (const auto& n : grid_dict["nodes"]) {
           auto arr = n.cast<std::vector<double>>();
-          if (arr.size() != 3)
-            DUNE_THROW(Dune::Exception, "each node has to have 3 entries");
-          data.nodes.push_back({arr[0], arr[1], arr[2]});
+          if (arr.size() != dim)
+            DUNE_THROW(Dune::Exception, "each node has to have " << dim << " entries");
+          typename duneuro::FittedMEEGDriverData<dim>::Coordinate p;
+          std::copy(arr.begin(), arr.end(), p.begin());
+          data.nodes.push_back(p);
         }
         for (const auto& e : grid_dict["elements"]) {
           data.elements.push_back(e.cast<std::vector<unsigned int>>());
@@ -185,36 +188,33 @@ static void extractFittedDataFromMainDict(py::dict d, duneuro::FittedMEEGDriverD
 }
 
 #if HAVE_DUNE_UDG
-static duneuro::UDGMEEGDriverData extractUDGDataFromMainDict(py::dict d)
+template <int dim>
+static duneuro::UDGMEEGDriverData<dim> extractUDGDataFromMainDict(py::dict d)
 {
-  duneuro::UDGMEEGDriverData data;
+  duneuro::UDGMEEGDriverData<dim> data;
   if (d.contains("domain") && d.contains("level_sets")) {
-    auto domainDict = d[py::str("domain")].cast<py::dict>();
-    auto list = domainDict[py::str("level_sets")].cast<py::list>();
+    auto domainDict = d["domain"].cast<py::dict>();
+    auto list = domainDict["level_sets"].cast<py::list>();
     for (auto lvlst : list) {
       auto levelsetDict = domainDict[lvlst].cast<py::dict>();
-      if (levelsetDict[py::str("type")].cast<py::str>() == py::str("image")) {
+      if (levelsetDict["type"].cast<py::str>() == py::str("image")) {
         for (auto item : levelsetDict) {
-          if (item.first.cast<std::string>() == "data") {
-            std::string type = item.second.get_type().attr("__name__").cast<std::string>();
+          if (item.first.cast<py::str>() == py::str("data")) {
             auto buffer = item.second.cast<py::buffer>();
             py::buffer_info info = buffer.request();
-            if (info.ndim != 3) {
-              DUNE_THROW(Dune::Exception, "only 3d level sets are supported");
-            }
             if (info.format != py::format_descriptor<double>::value) {
               DUNE_THROW(Dune::Exception, "only float level sets are supported. expected "
                                               << py::format_descriptor<double>::value << " got "
                                               << info.format);
             }
-            duneuro::SimpleStructuredGrid<3> grid({static_cast<unsigned int>(info.shape[0]),
-                                                   static_cast<unsigned int>(info.shape[1]),
-                                                   static_cast<unsigned int>(info.shape[2])});
+            std::array<unsigned int, dim> elementsInDim;
+            std::copy(info.shape.begin(), info.shape.end(), elementsInDim.begin());
+            duneuro::SimpleStructuredGrid<dim> grid(elementsInDim);
             double* ptr = reinterpret_cast<double*>(info.ptr);
             auto imagedata = std::make_shared<std::vector<double>>(ptr, ptr + info.size);
             data.levelSetData.images.push_back(
-                std::make_shared<duneuro::Image<double, 3>>(imagedata, grid));
-            levelsetDict[py::str("image_index")] = py::int_(data.levelSetData.images.size() - 1);
+                std::make_shared<duneuro::Image<double, dim>>(imagedata, grid));
+            levelsetDict["image_index"] = py::int_(data.levelSetData.images.size() - 1);
           }
         }
       }
@@ -283,8 +283,11 @@ void register_dipole(py::module& m)
 {
   using Dipole = duneuro::Dipole<T, dim>;
   using FieldVector = Dune::FieldVector<T, dim>;
+  std::stringstream classname;
+  classname << "Dipole" << dim << "d";
   py::class_<Dipole>(
-      m, "Dipole", "a class representing a mathematical dipole consisting of a position and moment")
+      m, classname.str().c_str(),
+      "a class representing a mathematical dipole consisting of a position and moment")
       .def(py::init<FieldVector, FieldVector>(), "create a dipole from its position and moment",
            py::arg("position"), py::arg("moment"))
       .def("__init__",
@@ -315,12 +318,15 @@ void register_dipole(py::module& m)
 template <class T, int dim>
 void register_read_dipoles(py::module& m)
 {
-  m.def("read_dipoles",
+  std::stringstream str;
+  str << "read_dipoles_" << dim << "d";
+  m.def(str.str().c_str(),
         [](const std::string& filename) { return duneuro::DipoleReader<T, dim>::read(filename); },
         R"pydoc(
 read dipoles from a file
 
-Each line of the file contains the position and moment of a single dipole as whitespace separated values, e.g.::
+Each line of the file contains the position and moment of a single dipole as whitespace separated values,
+e.g. for 3d::
 
   127 127 127 1 0 0
   128 128 127 0 1 0
@@ -332,7 +338,7 @@ for a file with two dipoles.
 template <class T, int dim>
 void register_field_vector_reader(py::module& m)
 {
-  auto name = "read_" + std::to_string(dim) + "d_field_vectors";
+  auto name = "read_field_vectors_" + std::to_string(dim) + "d";
   m.def(name.c_str(),
         [](const std::string& filename) {
           return duneuro::FieldVectorReader<T, dim>::read(filename);
@@ -340,7 +346,7 @@ void register_field_vector_reader(py::module& m)
         R"pydoc(
 read field vectors from a file
 
-Each line of the file contains the entries of a single field vector, e.g.::
+Each line of the file contains the entries of a single field vector, e.g. for 3d::
 
   127 127 127
   1 0 1
@@ -352,7 +358,7 @@ for a file with two field vectors.
 template <class T, int dim>
 void register_projections_reader(py::module& m)
 {
-  auto name = "read_" + std::to_string(dim) + "d_projections";
+  auto name = "read_projections_" + std::to_string(dim) + "d";
   m.def(name.c_str(),
         [](const std::string& filename) {
           return duneuro::ProjectionsReader<T, dim>::read(filename);
@@ -361,7 +367,7 @@ void register_projections_reader(py::module& m)
 read projections from a field
 
 Each line of the file belongs to the projections of a single coil. The projections are field
-vectors and the values should be separated by white spaces, e.g.::
+vectors and the values should be separated by white spaces, e.g. for 3d::
 
   1 0 0 0 1 0 0 0 1
   1 0 0 0 1 0 0 0 1
@@ -375,17 +381,19 @@ static inline void register_function(py::module& m)
   py::class_<duneuro::Function>(m, "FunctionWrapper", "a class representing a domain function");
 }
 
+template <int dim>
 class PyMEEGDriverInterface
 {
 public:
+  using Interface = duneuro::MEEGDriverInterface<dim>;
   explicit PyMEEGDriverInterface(py::dict d)
   {
-    duneuro::MEEGDriverData data;
+    duneuro::MEEGDriverData<dim> data;
 #if HAVE_DUNE_UDG
-    data.udgData = extractUDGDataFromMainDict(d);
+    data.udgData = extractUDGDataFromMainDict<dim>(d);
     extractFittedDataFromMainDict(d, data.fittedData);
 #endif
-    driver_ = duneuro::MEEGDriverFactory::make_meeg_driver(dictToParameterTree(d), data);
+    driver_ = duneuro::MEEGDriverFactory<dim>::make_meeg_driver(dictToParameterTree(d), data);
   }
 
   std::unique_ptr<duneuro::Function> makeDomainFunction() const
@@ -393,7 +401,7 @@ public:
     return driver_->makeDomainFunction();
   }
 
-  py::dict solveEEGForward(const duneuro::MEEGDriverInterface::DipoleType& dipole,
+  py::dict solveEEGForward(const typename Interface::DipoleType& dipole,
                            duneuro::Function& solution, py::dict config)
   {
     auto storage = std::make_shared<ParameterTreeStorage>();
@@ -425,7 +433,7 @@ public:
     return toPyDict(storage->tree);
   }
 
-  void setElectrodes(const std::vector<duneuro::MEEGDriverInterface::CoordinateType>& electrodes,
+  void setElectrodes(const std::vector<typename Interface::CoordinateType>& electrodes,
                      py::dict config)
   {
     driver_->setElectrodes(electrodes, dictToParameterTree(config));
@@ -437,8 +445,8 @@ public:
   }
 
   void setCoilsAndProjections(
-      const std::vector<duneuro::MEEGDriverInterface::CoordinateType>& coils,
-      const std::vector<std::vector<duneuro::MEEGDriverInterface::CoordinateType>>& projections)
+      const std::vector<typename Interface::CoordinateType>& coils,
+      const std::vector<std::vector<typename Interface::CoordinateType>>& projections)
   {
     driver_->setCoilsAndProjections(coils, projections);
   }
@@ -460,8 +468,7 @@ public:
   }
 
   std::pair<std::vector<double>, py::dict>
-  applyEEGTransfer(py::buffer buffer, const duneuro::MEEGDriverInterface::DipoleType& dipole,
-                   py::dict config)
+  applyEEGTransfer(py::buffer buffer, const typename Interface::DipoleType& dipole, py::dict config)
   {
     auto transferMatrix = toDenseMatrix(buffer);
     auto storage = std::make_shared<ParameterTreeStorage>();
@@ -471,8 +478,7 @@ public:
   }
 
   std::pair<std::vector<double>, py::dict>
-  applyMEGTransfer(py::buffer buffer, const duneuro::MEEGDriverInterface::DipoleType& dipole,
-                   py::dict config)
+  applyMEGTransfer(py::buffer buffer, const typename Interface::DipoleType& dipole, py::dict config)
   {
     auto transferMatrix = toDenseMatrix(buffer);
     auto storage = std::make_shared<ParameterTreeStorage>();
@@ -482,15 +488,19 @@ public:
   }
 
 private:
-  std::unique_ptr<duneuro::MEEGDriverInterface> driver_;
+  std::unique_ptr<Interface> driver_;
   Dune::ParameterTree tree_;
 };
 
+template <int dim>
 static inline void register_meeg_driver_interface(py::module& m)
 {
-  using write1 = py::dict (PyMEEGDriverInterface::*)(const duneuro::Function&, py::dict) const;
-  using write2 = py::dict (PyMEEGDriverInterface::*)(py::dict) const;
-  py::class_<PyMEEGDriverInterface>(m, "MEEGDriver")
+  using Interface = PyMEEGDriverInterface<dim>;
+  using write1 = py::dict (Interface::*)(const duneuro::Function&, py::dict) const;
+  using write2 = py::dict (Interface::*)(py::dict) const;
+  std::stringstream classname;
+  classname << "MEEGDriver" << dim << "d";
+  py::class_<Interface>(m, classname.str().c_str())
       .def(py::init<py::dict>(), R"pydoc(
 create a new MEEGDriver
 
@@ -589,36 +599,35 @@ the real driver to be used can be configured using the dictionary.
     domain.<domain.level_sets>.length = double
       )pydoc",
            py::arg("config"))
-      .def("makeDomainFunction", &PyMEEGDriverInterface::makeDomainFunction /* , */
+      .def("makeDomainFunction", &Interface::makeDomainFunction /* , */
            /* "create a domain function" */)
-      .def("solveEEGForward", &PyMEEGDriverInterface::solveEEGForward
+      .def("solveEEGForward", &Interface::solveEEGForward
            /* , */
            /* "solve the eeg forward problem and store the result in the given function" */)
-      .def("solveMEGForward", &PyMEEGDriverInterface::solveMEGForward
+      .def("solveMEGForward", &Interface::solveMEGForward
            /* , */
            /* "solve the meg forward problem and return the solution" */)
-      .def("write", write1(&PyMEEGDriverInterface::write))
-      .def("write", write2(&PyMEEGDriverInterface::write))
-      .def("setElectrodes", &PyMEEGDriverInterface::setElectrodes,
+      .def("write", write1(&Interface::write))
+      .def("write", write2(&Interface::write))
+      .def("setElectrodes", &Interface::setElectrodes,
            "set the electrodes. subsequent calls to evaluateAtElectrodes will use these "
            "electrodes.",
            py::arg("electrodes"), py::arg("config"))
-      .def("setCoilsAndProjections", &PyMEEGDriverInterface::setCoilsAndProjections,
+      .def("setCoilsAndProjections", &Interface::setCoilsAndProjections,
            "set coils and projections for meg. subsequent calls to solveMEGForward will use "
            "these "
            "coils and projections",
            py::arg("coils"), py::arg("projections"))
-      .def("evaluateAtElectrodes", &PyMEEGDriverInterface::evaluateAtElectrodes,
+      .def("evaluateAtElectrodes", &Interface::evaluateAtElectrodes,
            "evaluate the given function at the set electrodes")
-      .def("computeEEGTransferMatrix", &PyMEEGDriverInterface::computeEEGTransferMatrix,
+      .def("computeEEGTransferMatrix", &Interface::computeEEGTransferMatrix,
            "compute the eeg transfer matrix using the set electrodes", py::arg("config"))
-      .def("computeMEGTransferMatrix", &PyMEEGDriverInterface::computeMEGTransferMatrix,
+      .def("computeMEGTransferMatrix", &Interface::computeMEGTransferMatrix,
            "compute the meg transfer matrix using the set coils and projections", py::arg("config"))
-      .def("applyEEGTransfer", &PyMEEGDriverInterface::applyEEGTransfer,
-           "apply the eeg transfer matrix", py::arg("matrix"), py::arg("dipole"), py::arg("config"))
-      .def("applyMEGTransfer", &PyMEEGDriverInterface::applyMEGTransfer,
-           "apply the meg transfer matrix", py::arg("matrix"), py::arg("dipole"),
-           py::arg("config"));
+      .def("applyEEGTransfer", &Interface::applyEEGTransfer, "apply the eeg transfer matrix",
+           py::arg("matrix"), py::arg("dipole"), py::arg("config"))
+      .def("applyMEGTransfer", &Interface::applyMEGTransfer, "apply the meg transfer matrix",
+           py::arg("matrix"), py::arg("dipole"), py::arg("config"));
   ;
 }
 
@@ -638,12 +647,15 @@ void register_dense_matrix(py::module& m)
   });
 }
 
+template <int dim>
 static inline void register_points_on_sphere(py::module& m)
 {
-  m.def("generate_points_on_sphere",
+  std::stringstream str;
+  str << "generate_points_on_sphere_" << dim << "d";
+  m.def(str.str().c_str(),
         [](py::dict d) {
           auto ptree = dictToParameterTree(d);
-          return duneuro::generate_points_on_sphere<double, 3>(ptree);
+          return duneuro::generate_points_on_sphere<double, dim>(ptree);
         },
         R"pydoc(
 generate approximately uniformly distributed points on a sphere
@@ -655,7 +667,7 @@ generate approximately uniformly distributed points on a sphere
 
 static inline void register_analytical_solution(py::module& m)
 {
-  m.def("analytical_solution",
+  m.def("analytical_solution_3d",
         [](const std::vector<Dune::FieldVector<double, 3>>& electrodes,
            const duneuro::Dipole<double, 3>& dipole, py::dict config) {
           return duneuro::compute_analytic_solution(electrodes, dipole,
@@ -670,7 +682,9 @@ template <class ctype, int dim>
 static inline void register_point_vtk_writer(py::module& m)
 {
   using Writer = duneuro::PointVTKWriter<ctype, dim>;
-  py::class_<Writer>(m, "PointVTKWriter", "write points to vtk")
+  std::stringstream classname;
+  classname << "PointVTKWriter" << dim << "d";
+  py::class_<Writer>(m, classname.str().c_str(), "write points to vtk")
       .def(py::init<const std::vector<Dune::FieldVector<ctype, dim>>&, bool>())
       .def(py::init<const duneuro::Dipole<ctype, dim>&>())
       .def("addVectorData", &Writer::addVectorData, "add vector data to the given points.")
@@ -686,24 +700,29 @@ PYBIND11_PLUGIN(duneuropy)
 
   register_exceptions();
 
-  register_field_vector<double, 3>(m);
-  register_dipole<double, 3>(m);
-  register_read_dipoles<double, 3>(m);
-
-  register_field_vector_reader<double, 3>(m);
-  register_projections_reader<double, 3>(m);
-
   register_function(m);
 
   register_dense_matrix<double>(m);
 
-  register_meeg_driver_interface(m);
+  register_field_vector<double, 2>(m);
+  register_dipole<double, 2>(m);
+  register_read_dipoles<double, 2>(m);
+  register_field_vector_reader<double, 2>(m);
+  register_projections_reader<double, 2>(m);
+  register_meeg_driver_interface<2>(m);
+  register_points_on_sphere<2>(m);
+  register_point_vtk_writer<double, 2>(m);
 
-  register_points_on_sphere(m);
+  register_field_vector<double, 3>(m);
+  register_dipole<double, 3>(m);
+  register_read_dipoles<double, 3>(m);
+  register_field_vector_reader<double, 3>(m);
+  register_projections_reader<double, 3>(m);
+  register_meeg_driver_interface<3>(m);
+  register_points_on_sphere<3>(m);
+  register_point_vtk_writer<double, 3>(m);
 
   register_analytical_solution(m);
-
-  register_point_vtk_writer<double, 3>(m);
 
   return m.ptr();
 }
