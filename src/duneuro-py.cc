@@ -543,7 +543,25 @@ the real driver to be used can be configured using the dictionary.
 
     solver.edge_norm_type = cell | face | houston
     solver.penalty = double
+    solver.weights = bool
     solver.scheme = sipg | nipg
+
+  The edge norm type describes how the element diameter :math:`h` is calculated in the DG scheme.
+  On an intersection :math:`\gamma_{ef}` between elements :math:`e` and :math:`f`, the different
+  edge norm types are defined as
+
+  *cell*
+    :math:`h = \left(\frac{2|e||f|}{|e|+|f|}\right)^{\frac{1}{d}}`
+
+  *face*
+    :math:`h = |\gamma_{ef}|^{\frac{1}{d-1}}`
+
+  *houston*
+    :math:`h = \frac{\min(|e|,|f|)}{|\gamma_{ef}|}`
+
+  Where :math:`|e|` and :math:`|f|` denote the :math:`d`-dimensional measures of elements :math:`e`
+  and :math:`f` respectively and :math:`|\gamma_{ef}|` denotes the :math:`(d-1)`-dimension measure
+  of the face :math:`\gamma_{ef}`.
 
   **UDG MEEGDriver** (i.e. ``type == udg``)
 
@@ -559,6 +577,7 @@ the real driver to be used can be configured using the dictionary.
     solver.conductivities = vector<double>
     solver.edge_norm_type = cell | face | houston
     solver.penalty = double
+    solver.weights = bool
     solver.scheme = sipg | nipg
 
   The model geometry is given through level sets functions.
@@ -593,11 +612,32 @@ the real driver to be used can be configured using the dictionary.
     domain.<domain.level_sets>.length = double
       )pydoc",
            py::arg("config"))
-      .def("makeDomainFunction", &Interface::makeDomainFunction /* , */
-           /* "create a domain function" */)
-      .def("solveEEGForward", &Interface::solveEEGForward
-           /* , */
-           /* "solve the eeg forward problem and store the result in the given function" */)
+      .def("makeDomainFunction", &Interface::makeDomainFunction, "create a domain function")
+      .def("solveEEGForward", &Interface::solveEEGForward,
+           R"pydoc(
+solve the eeg forward problem and store the result in the given function
+
+:param config: dictionary to configure the solution process
+
+  .. code-block:: ini
+
+    post_process = bool
+    subtract_mean = bool
+
+  The solution of the linear system can be configured by settings options in the `solver` sub tree:
+
+  .. code-block:: ini
+
+    solver.reduction = double
+
+  The type of source model can be chosen by setting the `source_model.type` entry.
+
+  .. code-block:: ini
+
+    source_model.type = partial_integration | subtraction | venant
+
+  Depending on the type of the driver, not all source models might be available.
+           )pydoc")
       .def("solveMEGForward", &Interface::solveMEGForward
            /* , */
            /* "solve the meg forward problem and return the solution" */)
