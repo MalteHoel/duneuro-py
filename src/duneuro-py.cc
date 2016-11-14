@@ -62,10 +62,10 @@ py::dict toPyDict(const Dune::ParameterTree& tree)
 {
   py::dict out;
   for (const auto& key : tree.getValueKeys()) {
-    out[py::str(key)] = py::str(tree[key]);
+    out[key.c_str()] = py::str(tree[key]);
   }
   for (const auto& subkey : tree.getSubKeys()) {
-    out[py::str(subkey)] = toPyDict(tree.sub(subkey));
+    out[subkey.c_str()] = toPyDict(tree.sub(subkey));
   }
   return out;
 }
