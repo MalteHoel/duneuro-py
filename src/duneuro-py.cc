@@ -24,6 +24,9 @@
 #include <duneuro/io/projections_reader.hh>
 #include <duneuro/meeg/meeg_driver_factory.hh>
 #include <duneuro/meeg/meeg_driver_interface.hh>
+#include <duneuro/tes/patch_set.hh>
+#include <duneuro/tes/tdcs_driver_factory.hh>
+#include <duneuro/tes/tdcs_driver_interface.hh>
 
 namespace py = pybind11;
 
@@ -728,6 +731,68 @@ static inline void register_point_vtk_writer(py::module& m)
            "write the data to vtk");
 }
 
+template <class T, int dim>
+static inline void register_patch_set(py::module& m)
+{
+  using PS = duneuro::PatchSet<T, dim>;
+  std::stringstream name;
+  name << "PatchSet" << dim << "d";
+  py::class_<PS>(m, name.str().c_str()).def("__init__", [](PS& instance, py::dict d) {
+    new (&instance) PS(dictToParameterTree(d));
+  });
+}
+
+template <int dim>
+class PyTDCSDriverInterface
+{
+public:
+  using Interface = duneuro::TDCSDriverInterface<dim>;
+  explicit PyTDCSDriverInterface(py::dict d)
+  {
+    duneuro::TDCSDriverData<dim> data;
+    extractFittedDataFromMainDict(d, data.fittedData);
+    driver_ = duneuro::TDCSDriverFactory<dim>::make_tdcs_driver(dictToParameterTree(d), data);
+  }
+
+  std::unique_ptr<duneuro::Function> makeDomainFunction() const
+  {
+    return driver_->makeDomainFunction();
+  }
+
+  py::dict write(const duneuro::Function& solution, py::dict config) const
+  {
+    auto storage = std::make_shared<ParameterTreeStorage>();
+    driver_->write(solution, dictToParameterTree(config), duneuro::DataTree(storage));
+    return toPyDict(storage->tree);
+  }
+
+  py::dict solveTDCSForward(const duneuro::PatchSet<double, dim>& patchSet,
+                            duneuro::Function& solution, py::dict config) const
+  {
+    auto storage = std::make_shared<ParameterTreeStorage>();
+    driver_->solveTDCSForward(patchSet, solution, dictToParameterTree(config),
+                              duneuro::DataTree(storage));
+    return toPyDict(storage->tree);
+  }
+
+private:
+  std::unique_ptr<Interface> driver_;
+  Dune::ParameterTree tree_;
+};
+
+template <int dim>
+static inline void register_tdcs_driver_interface(py::module& m)
+{
+  using Interface = PyTDCSDriverInterface<dim>;
+  std::stringstream classname;
+  classname << "TDCSDriver" << dim << "d";
+  py::class_<Interface>(m, classname.str().c_str())
+      .def(py::init<py::dict>())
+      .def("makeDomainFunction", &Interface::makeDomainFunction, "create a domain function")
+      .def("write", &Interface::write)
+      .def("solveTDCSForward", &Interface::solveTDCSForward);
+}
+
 PYBIND11_PLUGIN(duneuropy)
 {
   py::module m("duneuropy", "duneuropy library");
@@ -746,6 +811,8 @@ PYBIND11_PLUGIN(duneuropy)
   register_meeg_driver_interface<2>(m);
   register_points_on_sphere<2>(m);
   register_point_vtk_writer<double, 2>(m);
+  register_patch_set<double, 2>(m);
+  register_tdcs_driver_interface<2>(m);
 
   register_field_vector<double, 3>(m);
   register_dipole<double, 3>(m);
@@ -755,6 +822,8 @@ PYBIND11_PLUGIN(duneuropy)
   register_meeg_driver_interface<3>(m);
   register_points_on_sphere<3>(m);
   register_point_vtk_writer<double, 3>(m);
+  register_patch_set<double, 3>(m);
+  register_tdcs_driver_interface<3>(m);
 
   register_analytical_solution(m);
 
