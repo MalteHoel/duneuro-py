@@ -195,30 +195,28 @@ template <int dim>
 static duneuro::UDGMEEGDriverData<dim> extractUDGDataFromMainDict(py::dict d)
 {
   duneuro::UDGMEEGDriverData<dim> data;
-  if (d.contains("domain") && d.contains("level_sets")) {
+  if (d.contains("domain") && d["domain"].contains("level_sets")) {
     auto domainDict = d["domain"].cast<py::dict>();
     auto list = domainDict["level_sets"].cast<py::list>();
     for (auto lvlst : list) {
       auto levelsetDict = domainDict[lvlst].cast<py::dict>();
-      if (levelsetDict["type"].cast<py::str>() == py::str("image")) {
-        for (auto item : levelsetDict) {
-          if (item.first.cast<py::str>() == py::str("data")) {
-            auto buffer = item.second.cast<py::buffer>();
-            py::buffer_info info = buffer.request();
-            if (info.format != py::format_descriptor<double>::value) {
-              DUNE_THROW(Dune::Exception, "only float level sets are supported. expected "
-                                              << py::format_descriptor<double>::value << " got "
-                                              << info.format);
-            }
-            std::array<unsigned int, dim> elementsInDim;
-            std::copy(info.shape.begin(), info.shape.end(), elementsInDim.begin());
-            duneuro::SimpleStructuredGrid<dim> grid(elementsInDim);
-            double* ptr = reinterpret_cast<double*>(info.ptr);
-            auto imagedata = std::make_shared<std::vector<double>>(ptr, ptr + info.size);
-            data.levelSetData.images.push_back(
-                std::make_shared<duneuro::Image<double, dim>>(imagedata, grid));
-            levelsetDict["image_index"] = py::int_(data.levelSetData.images.size() - 1);
+      if (levelsetDict["type"].cast<std::string>() == "image") {
+        if (levelsetDict.contains("data")) {
+          auto buffer = levelsetDict["data"].cast<py::buffer>();
+          py::buffer_info info = buffer.request();
+          if (info.format != py::format_descriptor<double>::value) {
+            DUNE_THROW(Dune::Exception, "only float level sets are supported. expected "
+                                            << py::format_descriptor<double>::value << " got "
+                                            << info.format);
           }
+          std::array<unsigned int, dim> elementsInDim;
+          std::copy(info.shape.begin(), info.shape.end(), elementsInDim.begin());
+          duneuro::SimpleStructuredGrid<dim> grid(elementsInDim);
+          double* ptr = reinterpret_cast<double*>(info.ptr);
+          auto imagedata = std::make_shared<std::vector<double>>(ptr, ptr + info.size);
+          data.levelSetData.images.push_back(
+              std::make_shared<duneuro::Image<double, dim>>(imagedata, grid));
+          levelsetDict["image_index"] = py::int_(data.levelSetData.images.size() - 1);
         }
       }
     }
@@ -388,8 +386,8 @@ public:
     duneuro::MEEGDriverData<dim> data;
 #if HAVE_DUNE_UDG
     data.udgData = extractUDGDataFromMainDict<dim>(d);
-    extractFittedDataFromMainDict(d, data.fittedData);
 #endif
+    extractFittedDataFromMainDict(d, data.fittedData);
     driver_ = duneuro::MEEGDriverFactory<dim>::make_meeg_driver(dictToParameterTree(d), data);
   }
 
@@ -747,16 +745,27 @@ class PyTDCSDriverInterface
 {
 public:
   using Interface = duneuro::TDCSDriverInterface<dim>;
-  explicit PyTDCSDriverInterface(py::dict d)
+  explicit PyTDCSDriverInterface(const duneuro::PatchSet<double, dim>& patchSet, py::dict d)
   {
     duneuro::TDCSDriverData<dim> data;
+#if HAVE_DUNE_UDG
+    data.udgData = extractUDGDataFromMainDict<dim>(d);
+#endif
     extractFittedDataFromMainDict(d, data.fittedData);
-    driver_ = duneuro::TDCSDriverFactory<dim>::make_tdcs_driver(dictToParameterTree(d), data);
+    driver_ =
+        duneuro::TDCSDriverFactory<dim>::make_tdcs_driver(patchSet, dictToParameterTree(d), data);
   }
 
   std::unique_ptr<duneuro::Function> makeDomainFunction() const
   {
     return driver_->makeDomainFunction();
+  }
+
+  py::dict write(py::dict config) const
+  {
+    auto storage = std::make_shared<ParameterTreeStorage>();
+    driver_->write(dictToParameterTree(config), duneuro::DataTree(storage));
+    return toPyDict(storage->tree);
   }
 
   py::dict write(const duneuro::Function& solution, py::dict config) const
@@ -766,12 +775,10 @@ public:
     return toPyDict(storage->tree);
   }
 
-  py::dict solveTDCSForward(const duneuro::PatchSet<double, dim>& patchSet,
-                            duneuro::Function& solution, py::dict config) const
+  py::dict solveTDCSForward(duneuro::Function& solution, py::dict config) const
   {
     auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->solveTDCSForward(patchSet, solution, dictToParameterTree(config),
-                              duneuro::DataTree(storage));
+    driver_->solveTDCSForward(solution, dictToParameterTree(config), duneuro::DataTree(storage));
     return toPyDict(storage->tree);
   }
 
@@ -787,9 +794,11 @@ static inline void register_tdcs_driver_interface(py::module& m)
   std::stringstream classname;
   classname << "TDCSDriver" << dim << "d";
   py::class_<Interface>(m, classname.str().c_str())
-      .def(py::init<py::dict>())
+      .def(py::init<duneuro::PatchSet<double, dim>, py::dict>())
       .def("makeDomainFunction", &Interface::makeDomainFunction, "create a domain function")
-      .def("write", &Interface::write)
+      .def("write", [](Interface& instance, py::dict config) { instance.write(config); })
+      .def("write", [](Interface& instance, const duneuro::Function& solution,
+                       py::dict config) { instance.write(solution, config); })
       .def("solveTDCSForward", &Interface::solveTDCSForward);
 }
 
