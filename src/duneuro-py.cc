@@ -150,7 +150,7 @@ static inline Dune::ParameterTree dictToParameterTree(py::dict dict)
 }
 
 template <int dim>
-static void extractFittedDataFromMainDict(py::dict d, duneuro::FittedMEEGDriverData<dim>& data)
+static void extractFittedDataFromMainDict(py::dict d, duneuro::FittedDriverData<dim>& data)
 {
   if (d.contains("volume_conductor")) {
     auto volume_conductor_dict = d["volume_conductor"].cast<py::dict>();
@@ -164,7 +164,7 @@ static void extractFittedDataFromMainDict(py::dict d, duneuro::FittedMEEGDriverD
           auto arr = n.cast<std::vector<double>>();
           if (arr.size() != dim)
             DUNE_THROW(Dune::Exception, "each node has to have " << dim << " entries");
-          typename duneuro::FittedMEEGDriverData<dim>::Coordinate p;
+          typename duneuro::FittedDriverData<dim>::Coordinate p;
           std::copy(arr.begin(), arr.end(), p.begin());
           data.nodes.push_back(p);
         }
