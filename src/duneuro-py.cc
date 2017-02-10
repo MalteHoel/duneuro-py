@@ -481,6 +481,13 @@ public:
     return {result, toPyDict(storage->tree)};
   }
 
+  py::dict setSourceModel(py::dict config)
+  {
+    auto storage = std::make_shared<ParameterTreeStorage>();
+    driver_->setSourceModel(dictToParameterTree(config), duneuro::DataTree(storage));
+    return toPyDict(storage->tree);
+  }
+
 private:
   std::unique_ptr<Interface> driver_;
   Dune::ParameterTree tree_;
@@ -661,7 +668,8 @@ solve the eeg forward problem and store the result in the given function
       .def("applyEEGTransfer", &Interface::applyEEGTransfer, "apply the eeg transfer matrix",
            py::arg("matrix"), py::arg("dipole"), py::arg("config"))
       .def("applyMEGTransfer", &Interface::applyMEGTransfer, "apply the meg transfer matrix",
-           py::arg("matrix"), py::arg("dipole"), py::arg("config"));
+           py::arg("matrix"), py::arg("dipole"), py::arg("config"))
+      .def("setSourceModel", &Interface::setSourceModel, "set source model", py::arg("config"));
   ;
 }
 
