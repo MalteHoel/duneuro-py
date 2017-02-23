@@ -160,8 +160,7 @@ static void extractFittedDataFromMainDict(py::dict d, duneuro::FittedDriverData<
     if (volume_conductor_dict.contains("grid") && volume_conductor_dict.contains("tensors")) {
       auto grid_dict = volume_conductor_dict["grid"].cast<py::dict>();
       auto tensor_dict = volume_conductor_dict["tensors"].cast<py::dict>();
-      if (grid_dict.contains("nodes") && grid_dict.contains("elements")
-          && tensor_dict.contains("labels") && tensor_dict.contains("conductivities")) {
+      if (grid_dict.contains("nodes") && grid_dict.contains("elements")) {
         std::cout << "casting nodes" << std::endl;
         for (const auto& n : grid_dict["nodes"]) {
           auto arr = n.cast<std::vector<double>>();
@@ -180,11 +179,10 @@ static void extractFittedDataFromMainDict(py::dict d, duneuro::FittedDriverData<
             }
           }
         }
+      }
+      if (tensor_dict.contains("labels") && tensor_dict.contains("conductivities")) {
         data.labels = tensor_dict["labels"].cast<std::vector<int>>();
         data.conductivities = tensor_dict["conductivities"].cast<std::vector<double>>();
-        if (data.labels.size() != data.elements.size()) {
-          DUNE_THROW(Dune::Exception, "labels and elements have to have the same size");
-        }
       }
     }
   }
