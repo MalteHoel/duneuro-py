@@ -41,15 +41,16 @@ def analyticalMEGsolution(coil_pos, dipoles, n) :
             bla =(mu /(4. * math.pi * F * F)) *(F * np.cross(q, ro) -(np.dot(np.cross(q, ro), np.array(r))) * gradF)
             Bhelp.append(list(bla))
             Bphelp.append(list((mu /(4. * math.pi)) * np.cross(q, aa)))
-            B.append(np.array([item for sublist in Bhelp for item in sublist]))
-            Bp.append(np.array([item for sublist in Bphelp for item in sublist]))
-            #extract the secondary component
-            Bs = list(np.array(B) - np.array(Bp))
-            #printing the time
-            print("--- %s seconds ---" %(time.time() - start_time))
-            #timing with 20K dipoles : -- - 611.4201629161835 seconds-- -
-            #transform Bp, Bs, B in unique lists
-            #Bp_py = [item for sublist in Bp for item in sublist]
-            #Bs_py = [item for sublist in Bs for item in sublist]
-            #B_py = [item for sublist in B for item in sublist]
-            return Bp, Bs, B #Bp_py, Bs_py, B_py
+
+        B.append(np.array([item for sublist in Bhelp for item in sublist]))
+        Bp.append(np.array([item for sublist in Bphelp for item in sublist]))
+    #extract the secondary component
+    Bs = list(np.array(B) - np.array(Bp))
+    #printing the time
+    print("--- %s seconds ---" %(time.time() - start_time))
+    #timing with 20K dipoles : -- - 611.4201629161835 seconds-- -
+    #transform Bp, Bs, B in unique lists
+    #Bp_py = [item for sublist in Bp for item in sublist]
+    #Bs_py = [item for sublist in Bs for item in sublist]
+    #B_py = [item for sublist in B for item in sublist]
+    return Bp, Bs, B #Bp_py, Bs_py, B_py
