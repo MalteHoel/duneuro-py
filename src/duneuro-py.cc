@@ -37,7 +37,7 @@ static inline void register_exceptions()
       if (p)
         std::rethrow_exception(p);
     } catch (const Dune::Exception& e) {
-      PyErr_SetString(PyExc_RuntimeError, e.what().c_str());
+      PyErr_SetString(PyExc_RuntimeError, e.what());
     }
   });
 }
