@@ -45,6 +45,7 @@ static inline void register_exceptions()
 struct ParameterTreeStorage : public duneuro::StorageInterface {
   virtual void store(const std::string& name, const std::string& value)
   {
+    std::lock_guard<std::mutex> lock(mutex);
     tree[name] = value;
   }
 
@@ -59,6 +60,7 @@ struct ParameterTreeStorage : public duneuro::StorageInterface {
   }
 
   Dune::ParameterTree tree;
+  std::mutex mutex;
 };
 
 py::dict toPyDict(const Dune::ParameterTree& tree)
@@ -460,33 +462,27 @@ public:
     return {result.release(), toPyDict(storage->tree)};
   }
 
-  std::pair<std::vector<double>, py::dict>
-  applyEEGTransfer(py::buffer buffer, const typename Interface::DipoleType& dipole, py::dict config)
+  std::pair<std::vector<std::vector<double>>, py::dict>
+  applyEEGTransfer(py::buffer buffer, const std::vector<typename Interface::DipoleType>& dipoles,
+                   py::dict config)
   {
     auto transferMatrix = toDenseMatrix(buffer);
     auto storage = std::make_shared<ParameterTreeStorage>();
-    auto result = driver_->applyEEGTransfer(*transferMatrix, dipole, dictToParameterTree(config),
+    auto result = driver_->applyEEGTransfer(*transferMatrix, dipoles, dictToParameterTree(config),
                                             duneuro::DataTree(storage));
     return {result, toPyDict(storage->tree)};
   }
 
-  std::pair<std::vector<double>, py::dict>
-  applyMEGTransfer(py::buffer buffer, const typename Interface::DipoleType& dipole, py::dict config)
+  std::pair<std::vector<std::vector<double>>, py::dict>
+  applyMEGTransfer(py::buffer buffer, const std::vector<typename Interface::DipoleType>& dipoles,
+                   py::dict config)
   {
     auto transferMatrix = toDenseMatrix(buffer);
     auto storage = std::make_shared<ParameterTreeStorage>();
-    auto result = driver_->applyMEGTransfer(*transferMatrix, dipole, dictToParameterTree(config),
+    auto result = driver_->applyMEGTransfer(*transferMatrix, dipoles, dictToParameterTree(config),
                                             duneuro::DataTree(storage));
     return {result, toPyDict(storage->tree)};
   }
-
-  py::dict setSourceModel(py::dict config)
-  {
-    auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->setSourceModel(dictToParameterTree(config), duneuro::DataTree(storage));
-    return toPyDict(storage->tree);
-  }
-
 private:
   std::unique_ptr<Interface> driver_;
   Dune::ParameterTree tree_;
@@ -665,11 +661,9 @@ solve the eeg forward problem and store the result in the given function
       .def("computeMEGTransferMatrix", &Interface::computeMEGTransferMatrix,
            "compute the meg transfer matrix using the set coils and projections", py::arg("config"))
       .def("applyEEGTransfer", &Interface::applyEEGTransfer, "apply the eeg transfer matrix",
-           py::arg("matrix"), py::arg("dipole"), py::arg("config"))
+           py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
       .def("applyMEGTransfer", &Interface::applyMEGTransfer, "apply the meg transfer matrix",
-           py::arg("matrix"), py::arg("dipole"), py::arg("config"))
-      .def("setSourceModel", &Interface::setSourceModel, "set source model", py::arg("config"));
-  ;
+           py::arg("matrix"), py::arg("dipoles"), py::arg("config"));
 }
 
 template <class T>
