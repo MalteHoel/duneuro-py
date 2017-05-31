@@ -432,6 +432,11 @@ public:
     driver_->setElectrodes(electrodes, dictToParameterTree(config));
   }
 
+  std::vector<typename Interface::CoordinateType> getProjectedElectrodes()
+  {
+    return driver_->getProjectedElectrodes();
+  }
+
   std::vector<double> evaluateAtElectrodes(const duneuro::Function& solution) const
   {
     return driver_->evaluateAtElectrodes(solution);
@@ -653,6 +658,8 @@ solve the eeg forward problem and store the result in the given function
            "set the electrodes. subsequent calls to evaluateAtElectrodes will use these "
            "electrodes.",
            py::arg("electrodes"), py::arg("config"))
+      .def("getProjectedElectrodes", &Interface::getProjectedElectrodes,
+           "return the projected electrodes in global coordinates")
       .def("setCoilsAndProjections", &Interface::setCoilsAndProjections,
            "set coils and projections for meg. subsequent calls to solveMEGForward will use "
            "these "
