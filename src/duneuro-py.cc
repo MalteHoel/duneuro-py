@@ -179,8 +179,10 @@ static void extractFittedDataFromMainDict(py::dict d, duneuro::FittedDriverData<
           }
         }
       }
-      if (tensor_dict.contains("labels") && tensor_dict.contains("conductivities")) {
-        data.labels = tensor_dict["labels"].cast<std::vector<int>>();
+      if (tensor_dict.contains("labels")) {
+        data.labels = tensor_dict["labels"].cast<std::vector<std::size_t>>();
+      }
+      if (tensor_dict.contains("conductivities")) {
         data.conductivities = tensor_dict["conductivities"].cast<std::vector<double>>();
       }
       if (tensor_dict.contains("tensors")) {
