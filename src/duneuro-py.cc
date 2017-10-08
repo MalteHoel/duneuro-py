@@ -209,6 +209,11 @@ static duneuro::UDGMEEGDriverData<dim> extractUDGDataFromMainDict(py::dict d)
                                             << py::format_descriptor<double>::value << " got "
                                             << info.format);
           }
+          // yasp grid uses col major ordering of the vertices in its index sets, which
+          // are then used by dune-functions to determine the index
+          if (info.strides[0] != sizeof(double)) {
+            DUNE_THROW(Dune::Exception, "only F-style (col major) ordering is supported");
+          }
           std::array<unsigned int, dim> elementsInDim;
           std::copy(info.shape.begin(), info.shape.end(), elementsInDim.begin());
           duneuro::SimpleStructuredGrid<dim> grid(elementsInDim);
