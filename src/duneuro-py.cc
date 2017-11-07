@@ -24,6 +24,7 @@
 #include <duneuro/io/projections_reader.hh>
 #include <duneuro/meeg/meeg_driver_factory.hh>
 #include <duneuro/meeg/meeg_driver_interface.hh>
+#include <duneuro/py/parameter_tree.h>
 #include <duneuro/tes/patch_set.hh>
 #include <duneuro/tes/tdcs_driver_factory.hh>
 #include <duneuro/tes/tdcs_driver_interface.hh>
@@ -63,18 +64,6 @@ struct ParameterTreeStorage : public duneuro::StorageInterface {
   std::mutex mutex;
 };
 
-py::dict toPyDict(const Dune::ParameterTree& tree)
-{
-  py::dict out;
-  for (const auto& key : tree.getValueKeys()) {
-    out[key.c_str()] = py::str(tree[key]);
-  }
-  for (const auto& subkey : tree.getSubKeys()) {
-    out[subkey.c_str()] = toPyDict(tree.sub(subkey));
-  }
-  return out;
-}
-
 std::unique_ptr<duneuro::DenseMatrix<double>> toDenseMatrix(py::buffer buffer)
 {
   /* Request a buffer descriptor from Python */
@@ -92,66 +81,6 @@ std::unique_ptr<duneuro::DenseMatrix<double>> toDenseMatrix(py::buffer buffer)
 
   return Dune::Std::make_unique<duneuro::DenseMatrix<double>>(info.shape[0], info.shape[1],
                                                               static_cast<double*>(info.ptr));
-}
-
-static inline std::string py_to_string(py::handle handle)
-{
-  std::string type = handle.get_type().attr("__name__").cast<std::string>();
-  if (type == "str")
-    return handle.cast<std::string>();
-  else if (type == "int")
-    return std::to_string(handle.cast<int>());
-  else if (type == "float") {
-    std::stringstream sstr;
-    sstr << handle.cast<double>();
-    return sstr.str();
-  } else if (type == "bool")
-    return std::to_string(handle.cast<bool>());
-  else if ((type == "list") || (type == "tuple")) {
-    std::stringstream str;
-    unsigned int i = 0;
-    for (auto it = handle.begin(); it != handle.end(); ++it, ++i) {
-      if (i > 0)
-        str << " ";
-      str << py_to_string(*it);
-    }
-    return str.str();
-  }
-  DUNE_THROW(Dune::Exception, "type \"" << type << "\" not supported");
-}
-
-static inline std::map<std::string, std::string> dictToStringMap(py::dict dict)
-{
-  std::map<std::string, std::string> map;
-  for (const auto& item : dict) {
-    std::string type = item.second.get_type().attr("__name__").cast<std::string>();
-    std::string key = py_to_string(item.first);
-    if (type == "dict") {
-      auto sub = dictToStringMap(item.second.cast<py::dict>());
-      for (const auto& k : sub) {
-        map[key + "." + k.first] = k.second;
-      }
-    } else {
-      try {
-        map[key] = py_to_string(item.second);
-      } catch (Dune::Exception& ex) {
-        // ignore entry
-      }
-    }
-  }
-  return map;
-}
-
-// translate a python dict to a Dune::ParameterTree. The dict can be nested and the sub dicts will
-// be translated recursively.
-static inline Dune::ParameterTree dictToParameterTree(py::dict dict)
-{
-  Dune::ParameterTree tree;
-  auto map = dictToStringMap(dict);
-  for (const auto& k : map) {
-    tree[k.first] = k.second;
-  }
-  return tree;
 }
 
 template <int dim>
@@ -393,7 +322,7 @@ public:
     data.udgData = extractUDGDataFromMainDict<dim>(d);
 #endif
     extractFittedDataFromMainDict(d, data.fittedData);
-    driver_ = duneuro::MEEGDriverFactory<dim>::make_meeg_driver(dictToParameterTree(d), data);
+    driver_ = duneuro::MEEGDriverFactory<dim>::make_meeg_driver(duneuro::toParameterTree(d), data);
   }
 
   std::unique_ptr<duneuro::Function> makeDomainFunction() const
@@ -405,38 +334,38 @@ public:
                            duneuro::Function& solution, py::dict config)
   {
     auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->solveEEGForward(dipole, solution, dictToParameterTree(config),
+    driver_->solveEEGForward(dipole, solution, duneuro::toParameterTree(config),
                              duneuro::DataTree(storage));
-    return toPyDict(storage->tree);
+    return duneuro::toPyDict(storage->tree);
   }
 
   std::pair<std::vector<double>, py::dict> solveMEGForward(const duneuro::Function& eegSolution,
                                                            py::dict config)
   {
     auto storage = std::make_shared<ParameterTreeStorage>();
-    auto result = driver_->solveMEGForward(eegSolution, dictToParameterTree(config),
+    auto result = driver_->solveMEGForward(eegSolution, duneuro::toParameterTree(config),
                                            duneuro::DataTree(storage));
-    return {result, toPyDict(storage->tree)};
+    return {result, duneuro::toPyDict(storage->tree)};
   }
 
   py::dict write(const duneuro::Function& solution, py::dict config) const
   {
     auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->write(solution, dictToParameterTree(config), duneuro::DataTree(storage));
-    return toPyDict(storage->tree);
+    driver_->write(solution, duneuro::toParameterTree(config), duneuro::DataTree(storage));
+    return duneuro::toPyDict(storage->tree);
   }
 
   py::dict write(py::dict config) const
   {
     auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->write(dictToParameterTree(config), duneuro::DataTree(storage));
-    return toPyDict(storage->tree);
+    driver_->write(duneuro::toParameterTree(config), duneuro::DataTree(storage));
+    return duneuro::toPyDict(storage->tree);
   }
 
   void setElectrodes(const std::vector<typename Interface::CoordinateType>& electrodes,
                      py::dict config)
   {
-    driver_->setElectrodes(electrodes, dictToParameterTree(config));
+    driver_->setElectrodes(electrodes, duneuro::toParameterTree(config));
   }
 
   std::vector<typename Interface::CoordinateType> getProjectedElectrodes()
@@ -459,17 +388,17 @@ public:
   std::pair<duneuro::DenseMatrix<double>*, py::dict> computeEEGTransferMatrix(py::dict config)
   {
     auto storage = std::make_shared<ParameterTreeStorage>();
-    std::unique_ptr<duneuro::DenseMatrix<double>> result =
-        driver_->computeEEGTransferMatrix(dictToParameterTree(config), duneuro::DataTree(storage));
-    return {result.release(), toPyDict(storage->tree)};
+    std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->computeEEGTransferMatrix(
+        duneuro::toParameterTree(config), duneuro::DataTree(storage));
+    return {result.release(), duneuro::toPyDict(storage->tree)};
   }
 
   std::pair<duneuro::DenseMatrix<double>*, py::dict> computeMEGTransferMatrix(py::dict config)
   {
     auto storage = std::make_shared<ParameterTreeStorage>();
-    std::unique_ptr<duneuro::DenseMatrix<double>> result =
-        driver_->computeMEGTransferMatrix(dictToParameterTree(config), duneuro::DataTree(storage));
-    return {result.release(), toPyDict(storage->tree)};
+    std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->computeMEGTransferMatrix(
+        duneuro::toParameterTree(config), duneuro::DataTree(storage));
+    return {result.release(), duneuro::toPyDict(storage->tree)};
   }
 
   std::pair<std::vector<std::vector<double>>, py::dict>
@@ -478,9 +407,9 @@ public:
   {
     auto transferMatrix = toDenseMatrix(buffer);
     auto storage = std::make_shared<ParameterTreeStorage>();
-    auto result = driver_->applyEEGTransfer(*transferMatrix, dipoles, dictToParameterTree(config),
-                                            duneuro::DataTree(storage));
-    return {result, toPyDict(storage->tree)};
+    auto result = driver_->applyEEGTransfer(
+        *transferMatrix, dipoles, duneuro::toParameterTree(config), duneuro::DataTree(storage));
+    return {result, duneuro::toPyDict(storage->tree)};
   }
 
   std::pair<std::vector<std::vector<double>>, py::dict>
@@ -489,10 +418,11 @@ public:
   {
     auto transferMatrix = toDenseMatrix(buffer);
     auto storage = std::make_shared<ParameterTreeStorage>();
-    auto result = driver_->applyMEGTransfer(*transferMatrix, dipoles, dictToParameterTree(config),
-                                            duneuro::DataTree(storage));
-    return {result, toPyDict(storage->tree)};
+    auto result = driver_->applyMEGTransfer(
+        *transferMatrix, dipoles, duneuro::toParameterTree(config), duneuro::DataTree(storage));
+    return {result, duneuro::toPyDict(storage->tree)};
   }
+
 private:
   std::unique_ptr<Interface> driver_;
   Dune::ParameterTree tree_;
@@ -701,7 +631,7 @@ static inline void register_points_on_sphere(py::module& m)
   str << "generate_points_on_sphere_" << dim << "d";
   m.def(str.str().c_str(),
         [](py::dict d) {
-          auto ptree = dictToParameterTree(d);
+          auto ptree = duneuro::toParameterTree(d);
           return duneuro::generate_points_on_sphere<double, dim>(ptree);
         },
         R"pydoc(
@@ -718,7 +648,7 @@ static inline void register_analytical_solution(py::module& m)
         [](const std::vector<Dune::FieldVector<double, 3>>& electrodes,
            const duneuro::Dipole<double, 3>& dipole, py::dict config) {
           return duneuro::compute_analytic_solution(electrodes, dipole,
-                                                    dictToParameterTree(config));
+                                                    duneuro::toParameterTree(config));
         },
         R"pydoc(
 compute the analytical solution of the EEG forward problem
@@ -748,7 +678,7 @@ static inline void register_patch_set(py::module& m)
   std::stringstream name;
   name << "PatchSet" << dim << "d";
   py::class_<PS>(m, name.str().c_str()).def("__init__", [](PS& instance, py::dict d) {
-    new (&instance) PS(dictToParameterTree(d));
+    new (&instance) PS(duneuro::toParameterTree(d));
   });
 }
 
@@ -764,8 +694,8 @@ public:
     data.udgData = extractUDGDataFromMainDict<dim>(d);
 #endif
     extractFittedDataFromMainDict(d, data.fittedData);
-    driver_ =
-        duneuro::TDCSDriverFactory<dim>::make_tdcs_driver(patchSet, dictToParameterTree(d), data);
+    driver_ = duneuro::TDCSDriverFactory<dim>::make_tdcs_driver(patchSet,
+                                                                duneuro::toParameterTree(d), data);
   }
 
   std::unique_ptr<duneuro::Function> makeDomainFunction() const
@@ -776,22 +706,23 @@ public:
   py::dict write(py::dict config) const
   {
     auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->write(dictToParameterTree(config), duneuro::DataTree(storage));
-    return toPyDict(storage->tree);
+    driver_->write(duneuro::toParameterTree(config), duneuro::DataTree(storage));
+    return duneuro::toPyDict(storage->tree);
   }
 
   py::dict write(const duneuro::Function& solution, py::dict config) const
   {
     auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->write(solution, dictToParameterTree(config), duneuro::DataTree(storage));
-    return toPyDict(storage->tree);
+    driver_->write(solution, duneuro::toParameterTree(config), duneuro::DataTree(storage));
+    return duneuro::toPyDict(storage->tree);
   }
 
   py::dict solveTDCSForward(duneuro::Function& solution, py::dict config) const
   {
     auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->solveTDCSForward(solution, dictToParameterTree(config), duneuro::DataTree(storage));
-    return toPyDict(storage->tree);
+    driver_->solveTDCSForward(solution, duneuro::toParameterTree(config),
+                              duneuro::DataTree(storage));
+    return duneuro::toPyDict(storage->tree);
   }
 
 private:
