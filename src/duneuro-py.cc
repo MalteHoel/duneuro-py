@@ -92,7 +92,6 @@ static void extractFittedDataFromMainDict(py::dict d, duneuro::FittedDriverData<
       auto grid_dict = volume_conductor_dict["grid"].cast<py::dict>();
       auto tensor_dict = volume_conductor_dict["tensors"].cast<py::dict>();
       if (grid_dict.contains("nodes") && grid_dict.contains("elements")) {
-        std::cout << "casting nodes" << std::endl;
         for (const auto& n : grid_dict["nodes"]) {
           auto arr = n.cast<std::vector<double>>();
           if (arr.size() != dim)
@@ -111,9 +110,29 @@ static void extractFittedDataFromMainDict(py::dict d, duneuro::FittedDriverData<
           }
         }
       }
-      if (tensor_dict.contains("labels") && tensor_dict.contains("conductivities")) {
-        data.labels = tensor_dict["labels"].cast<std::vector<int>>();
+      if (tensor_dict.contains("labels")) {
+        data.labels = tensor_dict["labels"].cast<std::vector<std::size_t>>();
+      }
+      if (tensor_dict.contains("conductivities")) {
         data.conductivities = tensor_dict["conductivities"].cast<std::vector<double>>();
+      }
+      if (tensor_dict.contains("tensors")) {
+        for (const auto& t : tensor_dict["tensors"]) {
+          auto arr = t.cast<py::array_t<double, py::array::c_style | py::array::forcecast>>();
+          if (arr.ndim() != 2) {
+            DUNE_THROW(Dune::Exception, "a tensor has to be a two dimensional matrix");
+          }
+          if (arr.shape(0) != dim || arr.shape(1) != dim) {
+            DUNE_THROW(Dune::Exception, "tensor has to be a " << dim << "x" << dim << " matrix");
+          }
+          Dune::FieldMatrix<double, dim, dim> m;
+          for (unsigned int i = 0; i < dim; ++i) {
+            for (unsigned int j = 0; j < dim; ++j) {
+              m[i][j] = *arr.data(i, j);
+            }
+          }
+          data.tensors.push_back(m);
+        }
       }
     }
   }
