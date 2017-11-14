@@ -28,6 +28,9 @@
 #include <duneuro/tes/patch_set.hh>
 #include <duneuro/tes/tdcs_driver_factory.hh>
 #include <duneuro/tes/tdcs_driver_interface.hh>
+#if HAVE_DUNE_UDG
+#include <duneuro/udg/hexahedralization.hh>
+#endif
 
 namespace py = pybind11;
 
@@ -309,6 +312,18 @@ static inline void register_function(py::module& m)
 {
   py::class_<duneuro::Function>(m, "FunctionWrapper", "a class representing a domain function");
 }
+
+#if HAVE_DUNE_UDG
+template <int dim>
+void register_hexahedralize(py::module& py)
+{
+  auto name = "hexahedralize_" + std::to_string(dim) + "d";
+  py.def(name.c_str(), [](py::dict d) {
+    auto data = extractUDGDataFromMainDict<dim>(d);
+    return duneuro::hexahedralize(data, duneuro::toParameterTree(d));
+  });
+}
+#endif
 
 template <int dim>
 class PyMEEGDriverInterface
@@ -765,6 +780,9 @@ PYBIND11_PLUGIN(duneuropy)
   register_point_vtk_writer<double, 2>(m);
   register_patch_set<double, 2>(m);
   register_tdcs_driver_interface<2>(m);
+#if HAVE_DUNE_UDG
+  register_hexahedralize<2>(m);
+#endif
 
   register_field_vector<double, 3>(m);
   register_dipole<double, 3>(m);
@@ -776,6 +794,9 @@ PYBIND11_PLUGIN(duneuropy)
   register_point_vtk_writer<double, 3>(m);
   register_patch_set<double, 3>(m);
   register_tdcs_driver_interface<3>(m);
+#if HAVE_DUNE_UDG
+  register_hexahedralize<3>(m);
+#endif
 
   register_analytical_solution(m);
 
