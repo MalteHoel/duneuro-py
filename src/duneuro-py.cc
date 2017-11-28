@@ -89,9 +89,9 @@ std::unique_ptr<duneuro::DenseMatrix<double>> toDenseMatrix(py::buffer buffer)
 
 #if HAVE_DUNE_UDG
 template <int dim>
-static duneuro::UDGMEEGDriverData<dim> extractUDGDataFromMainDict(py::dict d)
+static duneuro::UnfittedMEEGDriverData<dim> extractUnfittedDataFromMainDict(py::dict d)
 {
-  duneuro::UDGMEEGDriverData<dim> data;
+  duneuro::UnfittedMEEGDriverData<dim> data;
   if (d.contains("domain") && d["domain"].contains("level_sets")) {
     auto domainDict = d["domain"].cast<py::dict>();
     auto list = domainDict["level_sets"].cast<py::list>();
@@ -284,7 +284,7 @@ void register_hexahedralize(py::module& py)
 {
   auto name = "hexahedralize_" + std::to_string(dim) + "d";
   py.def(name.c_str(), [](py::dict d) {
-    auto data = extractUDGDataFromMainDict<dim>(d);
+    auto data = extractUnfittedDataFromMainDict<dim>(d);
     return duneuro::hexahedralize(data, duneuro::toParameterTree(d));
   });
 }
@@ -299,7 +299,7 @@ public:
   {
     duneuro::MEEGDriverData<dim> data;
 #if HAVE_DUNE_UDG
-    data.udgData = extractUDGDataFromMainDict<dim>(d);
+    data.unfittedData = extractUnfittedDataFromMainDict<dim>(d);
 #endif
     duneuro::extractFittedDataFromMainDict(d, data.fittedData);
     driver_ = duneuro::MEEGDriverFactory<dim>::make_meeg_driver(duneuro::toParameterTree(d), data);
@@ -671,7 +671,7 @@ public:
   {
     duneuro::TDCSDriverData<dim> data;
 #if HAVE_DUNE_UDG
-    data.udgData = extractUDGDataFromMainDict<dim>(d);
+    data.udgData = extractUnfittedDataFromMainDict<dim>(d);
 #endif
     duneuro::extractFittedDataFromMainDict(d, data.fittedData);
     driver_ = duneuro::TDCSDriverFactory<dim>::make_tdcs_driver(patchSet,
