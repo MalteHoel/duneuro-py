@@ -24,6 +24,7 @@
 #include <duneuro/io/projections_reader.hh>
 #include <duneuro/meeg/meeg_driver_factory.hh>
 #include <duneuro/meeg/meeg_driver_interface.hh>
+#include <duneuro/py/dipole_statistics.hh>
 #include <duneuro/py/parameter_tree.h>
 #include <duneuro/tes/patch_set.hh>
 #include <duneuro/tes/tdcs_driver_factory.hh>
@@ -84,61 +85,6 @@ std::unique_ptr<duneuro::DenseMatrix<double>> toDenseMatrix(py::buffer buffer)
 
   return Dune::Std::make_unique<duneuro::DenseMatrix<double>>(info.shape[0], info.shape[1],
                                                               static_cast<double*>(info.ptr));
-}
-
-template <int dim>
-static void extractFittedDataFromMainDict(py::dict d, duneuro::FittedDriverData<dim>& data)
-{
-  if (d.contains("volume_conductor")) {
-    auto volume_conductor_dict = d["volume_conductor"].cast<py::dict>();
-    if (volume_conductor_dict.contains("grid") && volume_conductor_dict.contains("tensors")) {
-      auto grid_dict = volume_conductor_dict["grid"].cast<py::dict>();
-      auto tensor_dict = volume_conductor_dict["tensors"].cast<py::dict>();
-      if (grid_dict.contains("nodes") && grid_dict.contains("elements")) {
-        for (const auto& n : grid_dict["nodes"]) {
-          auto arr = n.cast<std::vector<double>>();
-          if (arr.size() != dim)
-            DUNE_THROW(Dune::Exception, "each node has to have " << dim << " entries");
-          typename duneuro::FittedDriverData<dim>::Coordinate p;
-          std::copy(arr.begin(), arr.end(), p.begin());
-          data.nodes.push_back(p);
-        }
-        for (const auto& e : grid_dict["elements"]) {
-          data.elements.push_back(e.cast<std::vector<unsigned int>>());
-          for (const auto& ei : data.elements.back()) {
-            if (ei >= data.nodes.size()) {
-              DUNE_THROW(Dune::Exception, "node index " << ei << " out of bounds ("
-                                                        << data.nodes.size() << ")");
-            }
-          }
-        }
-      }
-      if (tensor_dict.contains("labels")) {
-        data.labels = tensor_dict["labels"].cast<std::vector<std::size_t>>();
-      }
-      if (tensor_dict.contains("conductivities")) {
-        data.conductivities = tensor_dict["conductivities"].cast<std::vector<double>>();
-      }
-      if (tensor_dict.contains("tensors")) {
-        for (const auto& t : tensor_dict["tensors"]) {
-          auto arr = t.cast<py::array_t<double, py::array::c_style | py::array::forcecast>>();
-          if (arr.ndim() != 2) {
-            DUNE_THROW(Dune::Exception, "a tensor has to be a two dimensional matrix");
-          }
-          if (arr.shape(0) != dim || arr.shape(1) != dim) {
-            DUNE_THROW(Dune::Exception, "tensor has to be a " << dim << "x" << dim << " matrix");
-          }
-          Dune::FieldMatrix<double, dim, dim> m;
-          for (unsigned int i = 0; i < dim; ++i) {
-            for (unsigned int j = 0; j < dim; ++j) {
-              m[i][j] = *arr.data(i, j);
-            }
-          }
-          data.tensors.push_back(m);
-        }
-      }
-    }
-  }
 }
 
 #if HAVE_DUNE_UDG
@@ -355,7 +301,7 @@ public:
 #if HAVE_DUNE_UDG
     data.udgData = extractUDGDataFromMainDict<dim>(d);
 #endif
-    extractFittedDataFromMainDict(d, data.fittedData);
+    duneuro::extractFittedDataFromMainDict(d, data.fittedData);
     driver_ = duneuro::MEEGDriverFactory<dim>::make_meeg_driver(duneuro::toParameterTree(d), data);
   }
 
@@ -727,7 +673,7 @@ public:
 #if HAVE_DUNE_UDG
     data.udgData = extractUDGDataFromMainDict<dim>(d);
 #endif
-    extractFittedDataFromMainDict(d, data.fittedData);
+    duneuro::extractFittedDataFromMainDict(d, data.fittedData);
     driver_ = duneuro::TDCSDriverFactory<dim>::make_tdcs_driver(patchSet,
                                                                 duneuro::toParameterTree(d), data);
   }
@@ -802,6 +748,7 @@ PYBIND11_PLUGIN(duneuropy)
 #if HAVE_DUNE_UDG
   register_hexahedralize<2>(m);
 #endif
+  duneuro::register_dipole_statistics<2>(m);
 
   register_field_vector<double, 3>(m);
   register_dipole<double, 3>(m);
@@ -816,6 +763,7 @@ PYBIND11_PLUGIN(duneuropy)
 #if HAVE_DUNE_UDG
   register_hexahedralize<3>(m);
 #endif
+  duneuro::register_dipole_statistics<3>(m);
 
   register_analytical_solution(m);
 
