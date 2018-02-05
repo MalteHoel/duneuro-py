@@ -31,6 +31,7 @@
 #include <duneuro/tes/tdcs_driver_interface.hh>
 #if HAVE_DUNE_UDG
 #include <duneuro/udg/hexahedralization.hh>
+#include <duneuro/udg/unfitted_statistics.hh>
 #endif
 
 namespace py = pybind11;
@@ -89,9 +90,9 @@ std::unique_ptr<duneuro::DenseMatrix<double>> toDenseMatrix(py::buffer buffer)
 
 #if HAVE_DUNE_UDG
 template <int dim>
-static duneuro::UDGMEEGDriverData<dim> extractUDGDataFromMainDict(py::dict d)
+static duneuro::UnfittedMEEGDriverData<dim> extractUnfittedDataFromMainDict(py::dict d)
 {
-  duneuro::UDGMEEGDriverData<dim> data;
+  duneuro::UnfittedMEEGDriverData<dim> data;
   if (d.contains("domain") && d["domain"].contains("level_sets")) {
     auto domainDict = d["domain"].cast<py::dict>();
     auto list = domainDict["level_sets"].cast<py::list>();
@@ -284,10 +285,27 @@ void register_hexahedralize(py::module& py)
 {
   auto name = "hexahedralize_" + std::to_string(dim) + "d";
   py.def(name.c_str(), [](py::dict d) {
-    auto data = extractUDGDataFromMainDict<dim>(d);
+    auto data = extractUnfittedDataFromMainDict<dim>(d);
     return duneuro::hexahedralize(data, duneuro::toParameterTree(d));
   });
 }
+
+template <int dim>
+void register_unfitted_statistics(py::module& m)
+{
+  using US = duneuro::UnfittedStatistics<dim>;
+  auto name = "UnfittedStatistics" + std::to_string(dim) + "d";
+  py::class_<US>(m, name.c_str(), "statistics of an unfitted discretization")
+      .def("__init__",
+           [](US& instance, py::dict d) {
+             auto ud = extractUnfittedDataFromMainDict<dim>(d);
+             new (&instance) US(ud, duneuro::toParameterTree(d));
+           })
+      .def("interfaceValues", &US::interfaceValues, "evaluate the interfaces at a given position.")
+      .def("domainVolumes", &US::domainVolumes,
+           "evaluate the discrete volume of the different domains");
+}
+
 #endif
 
 template <int dim>
@@ -299,7 +317,7 @@ public:
   {
     duneuro::MEEGDriverData<dim> data;
 #if HAVE_DUNE_UDG
-    data.udgData = extractUDGDataFromMainDict<dim>(d);
+    data.unfittedData = extractUnfittedDataFromMainDict<dim>(d);
 #endif
     duneuro::extractFittedDataFromMainDict(d, data.fittedData);
     driver_ = duneuro::MEEGDriverFactory<dim>::make_meeg_driver(duneuro::toParameterTree(d), data);
@@ -671,7 +689,7 @@ public:
   {
     duneuro::TDCSDriverData<dim> data;
 #if HAVE_DUNE_UDG
-    data.udgData = extractUDGDataFromMainDict<dim>(d);
+    data.udgData = extractUnfittedDataFromMainDict<dim>(d);
 #endif
     duneuro::extractFittedDataFromMainDict(d, data.fittedData);
     driver_ = duneuro::TDCSDriverFactory<dim>::make_tdcs_driver(patchSet,
@@ -747,6 +765,7 @@ PYBIND11_PLUGIN(duneuropy)
   register_tdcs_driver_interface<2>(m);
 #if HAVE_DUNE_UDG
   register_hexahedralize<2>(m);
+  register_unfitted_statistics<2>(m);
 #endif
   duneuro::register_dipole_statistics<2>(m);
 
@@ -762,6 +781,7 @@ PYBIND11_PLUGIN(duneuropy)
   register_tdcs_driver_interface<3>(m);
 #if HAVE_DUNE_UDG
   register_hexahedralize<3>(m);
+  register_unfitted_statistics<3>(m);
 #endif
   duneuro::register_dipole_statistics<3>(m);
 
