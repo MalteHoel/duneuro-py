@@ -31,6 +31,7 @@
 #include <duneuro/tes/tdcs_driver_interface.hh>
 #if HAVE_DUNE_UDG
 #include <duneuro/udg/hexahedralization.hh>
+#include <duneuro/udg/unfitted_statistics.hh>
 #endif
 
 namespace py = pybind11;
@@ -288,6 +289,23 @@ void register_hexahedralize(py::module& py)
     return duneuro::hexahedralize(data, duneuro::toParameterTree(d));
   });
 }
+
+template <int dim>
+void register_unfitted_statistics(py::module& m)
+{
+  using US = duneuro::UnfittedStatistics<dim>;
+  auto name = "UnfittedStatistics" + std::to_string(dim) + "d";
+  py::class_<US>(m, name.c_str(), "statistics of an unfitted discretization")
+      .def("__init__",
+           [](US& instance, py::dict d) {
+             auto ud = extractUnfittedDataFromMainDict<dim>(d);
+             new (&instance) US(ud, duneuro::toParameterTree(d));
+           })
+      .def("interfaceValues", &US::interfaceValues, "evaluate the interfaces at a given position.")
+      .def("domainVolumes", &US::domainVolumes,
+           "evaluate the discrete volume of the different domains");
+}
+
 #endif
 
 template <int dim>
@@ -747,6 +765,7 @@ PYBIND11_PLUGIN(duneuropy)
   register_tdcs_driver_interface<2>(m);
 #if HAVE_DUNE_UDG
   register_hexahedralize<2>(m);
+  register_unfitted_statistics<2>(m);
 #endif
   duneuro::register_dipole_statistics<2>(m);
 
@@ -762,6 +781,7 @@ PYBIND11_PLUGIN(duneuropy)
   register_tdcs_driver_interface<3>(m);
 #if HAVE_DUNE_UDG
   register_hexahedralize<3>(m);
+  register_unfitted_statistics<3>(m);
 #endif
   duneuro::register_dipole_statistics<3>(m);
 
