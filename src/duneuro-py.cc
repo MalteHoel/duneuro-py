@@ -17,7 +17,6 @@
 
 #include <duneuro/common/dense_matrix.hh>
 #include <duneuro/common/points_on_sphere.hh>
-#include <duneuro/eeg/eeg_analytic_solution.hh>
 #include <duneuro/io/dipole_reader.hh>
 #include <duneuro/io/field_vector_reader.hh>
 #include <duneuro/io/point_vtk_writer.hh>
@@ -640,19 +639,6 @@ generate approximately uniformly distributed points on a sphere
         py::arg("config"));
 }
 
-static inline void register_analytical_solution(py::module& m)
-{
-  m.def("analytical_solution_3d",
-        [](const std::vector<Dune::FieldVector<double, 3>>& electrodes,
-           const duneuro::Dipole<double, 3>& dipole, py::dict config) {
-          return duneuro::compute_analytic_solution(electrodes, dipole,
-                                                    duneuro::toParameterTree(config));
-        },
-        R"pydoc(
-compute the analytical solution of the EEG forward problem
-  )pydoc");
-}
-
 template <class ctype, int dim>
 static inline void register_point_vtk_writer(py::module& m)
 {
@@ -784,8 +770,6 @@ PYBIND11_PLUGIN(duneuropy)
   register_unfitted_statistics<3>(m);
 #endif
   duneuro::register_dipole_statistics<3>(m);
-
-  register_analytical_solution(m);
 
   return m.ptr();
 }
