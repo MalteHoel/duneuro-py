@@ -300,9 +300,7 @@ void register_unfitted_statistics(py::module& m)
              auto ud = extractUnfittedDataFromMainDict<dim>(d);
              new (&instance) US(ud, duneuro::toParameterTree(d));
            })
-      .def("interfaceValues", &US::interfaceValues, "evaluate the interfaces at a given position.")
-      .def("domainVolumes", &US::domainVolumes,
-           "evaluate the discrete volume of the different domains");
+      .def("interfaceValues", &US::interfaceValues, "evaluate the interfaces at a given position.");
 }
 
 #endif
@@ -418,6 +416,13 @@ public:
     auto result = driver_->applyMEGTransfer(
         *transferMatrix, dipoles, duneuro::toParameterTree(config), duneuro::DataTree(storage));
     return {result, duneuro::toPyDict(storage->tree)};
+  }
+
+  py::dict statistics()
+  {
+    auto storage = std::make_shared<ParameterTreeStorage>();
+    driver_->statistics(duneuro::DataTree(storage));
+    return duneuro::toPyDict(storage->tree);
   }
 
 private:
@@ -602,7 +607,8 @@ solve the eeg forward problem and store the result in the given function
       .def("applyEEGTransfer", &Interface::applyEEGTransfer, "apply the eeg transfer matrix",
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
       .def("applyMEGTransfer", &Interface::applyMEGTransfer, "apply the meg transfer matrix",
-           py::arg("matrix"), py::arg("dipoles"), py::arg("config"));
+           py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
+      .def("statistics", &Interface::statistics, "compute driver statistics");
 }
 
 template <class T>
