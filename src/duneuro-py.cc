@@ -425,6 +425,11 @@ public:
     return duneuro::toPyDict(storage->tree);
   }
 
+  void print_citations()
+  {
+     driver_->print_citations();
+  }
+
 private:
   std::unique_ptr<Interface> driver_;
   Dune::ParameterTree tree_;
@@ -608,7 +613,8 @@ solve the eeg forward problem and store the result in the given function
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
       .def("applyMEGTransfer", &Interface::applyMEGTransfer, "apply the meg transfer matrix",
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
-      .def("statistics", &Interface::statistics, "compute driver statistics");
+      .def("statistics", &Interface::statistics, "compute driver statistics")
+      .def("print_citations", &Interface::print_citations, "list relevant publications");
 }
 
 template <class T>
