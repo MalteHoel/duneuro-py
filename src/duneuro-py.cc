@@ -21,8 +21,8 @@
 #include <duneuro/io/field_vector_reader.hh>
 #include <duneuro/io/point_vtk_writer.hh>
 #include <duneuro/io/projections_reader.hh>
-#include <duneuro/meeg/meeg_driver_factory.hh>
-#include <duneuro/meeg/meeg_driver_interface.hh>
+#include <duneuro/driver/driver_factory.hh>
+#include <duneuro/driver/driver_interface.hh>
 #include <duneuro/py/dipole_statistics.hh>
 #include <duneuro/py/parameter_tree.h>
 #include <duneuro/tes/patch_set.hh>
@@ -309,7 +309,7 @@ template <int dim>
 class PyMEEGDriverInterface
 {
 public:
-  using Interface = duneuro::MEEGDriverInterface<dim>;
+  using Interface = duneuro::DriverInterface<dim>;
   explicit PyMEEGDriverInterface(py::dict d)
   {
     duneuro::MEEGDriverData<dim> data;
@@ -317,7 +317,7 @@ public:
     data.unfittedData = extractUnfittedDataFromMainDict<dim>(d);
 #endif
     duneuro::extractFittedDataFromMainDict(d, data.fittedData);
-    driver_ = duneuro::MEEGDriverFactory<dim>::make_meeg_driver(duneuro::toParameterTree(d), data);
+    driver_ = duneuro::DriverFactory<dim>::make_driver(duneuro::toParameterTree(d), data);
   }
 
   std::unique_ptr<duneuro::Function> makeDomainFunction() const
