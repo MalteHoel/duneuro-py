@@ -166,8 +166,8 @@ void register_field_vector(py::module& m)
       .def("__len__", &FieldVector::size)
       .def("__getitem__",
            [](const FieldVector& instance, std::size_t i) {
-             return assert(i < dim);
-             instance[i];
+             assert(i < dim);
+             return instance[i];
            })
       .def("__str__", [](const FieldVector& fv) {
         std::stringstream sstr;
