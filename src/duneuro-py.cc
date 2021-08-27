@@ -13,7 +13,6 @@
 
 #include <dune/common/parametertree.hh>
 #include <dune/common/parametertreeparser.hh>
-#include <dune/common/std/memory.hh>
 
 #include <duneuro/common/dense_matrix.hh>
 #include <duneuro/common/points_on_sphere.hh>
@@ -83,7 +82,7 @@ std::unique_ptr<duneuro::DenseMatrix<double>> toDenseMatrix(py::buffer buffer)
   if (info.strides[1] / sizeof(double) != 1)
     throw std::runtime_error("Supporting only row major format");
 
-  return Dune::Std::make_unique<duneuro::DenseMatrix<double>>(info.shape[0], info.shape[1],
+  return std::make_unique<duneuro::DenseMatrix<double>>(info.shape[0], info.shape[1],
                                                               static_cast<double*>(info.ptr));
 }
 
