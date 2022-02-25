@@ -134,7 +134,7 @@ void register_field_vector(py::module& m)
   std::stringstream docstr;
   docstr << "a " << dim << "-dimensional vector";
   py::class_<FieldVector>(m, (std::string("FieldVector") + std::to_string(dim) + "D").c_str(),
-                          docstr.str().c_str())
+                          docstr.str().c_str(), py::buffer_protocol())
       .def_buffer([](FieldVector& m) -> py::buffer_info {
         return py::buffer_info(
             &m[0], /* Pointer to buffer */
@@ -145,17 +145,21 @@ void register_field_vector(py::module& m)
             {sizeof(T)});
       })
       .def(py::init<T>())
-      .def("__init__",
-           [](FieldVector& instance, py::array_t<T> array) {
-             if (array.size() != dim)
-               DUNE_THROW(Dune::Exception, "array has to have size " << dim << " but got "
-                                                                     << array.size());
-             if (array.ndim() != 1)
-               DUNE_THROW(Dune::Exception, "array has to have dim " << 1 << " but got "
-                                                                    << array.ndim());
-             new (&instance) FieldVector();
-             std::copy(array.data(), array.data() + dim, instance.begin());
-           })
+      .def(py::init(
+        [] (py::array_t<T> array) {
+          if (array.size() != dim) {
+            DUNE_THROW(Dune::Exception, "array has to have size " << dim << " but got" << array.size());
+          }
+          if (array.ndim() != 1) {
+            DUNE_THROW(Dune::Exception, "array has to have dim " << 1 << " but got " << array.ndim());
+          }
+          FieldVector vector(0.0);
+          const T* data_ptr = array.data();
+          std::copy(data_ptr, data_ptr + dim, vector.begin());
+          return vector;
+        }), // end definition of lambda
+        "create a vector from any python buffer, such as a numpy array"
+      ) // end definition of constructor
       .def(py::self += py::self)
       .def(py::self -= py::self)
       .def(py::self += T())
@@ -620,7 +624,7 @@ template <class T>
 void register_dense_matrix(py::module& m)
 {
   using Matrix = duneuro::DenseMatrix<T>;
-  py::class_<Matrix>(m, "Matrix").def_buffer([](Matrix& m) -> py::buffer_info {
+  py::class_<Matrix>(m, "Matrix", py::buffer_protocol()).def_buffer([](Matrix& m) -> py::buffer_info {
     return py::buffer_info(
         m.data(), /* Pointer to buffer */
         sizeof(T), /* Size of one scalar */
@@ -740,9 +744,9 @@ static inline void register_tdcs_driver_interface(py::module& m)
       .def("solveTDCSForward", &Interface::solveTDCSForward);
 }
 
-PYBIND11_PLUGIN(duneuropy)
+PYBIND11_MODULE(duneuropy, m)
 {
-  py::module m("duneuropy", "duneuropy library");
+	m.doc() = "duneuropy library";
 
   register_exceptions();
 
@@ -781,6 +785,4 @@ PYBIND11_PLUGIN(duneuropy)
   register_unfitted_statistics<3>(m);
 #endif
   duneuro::register_dipole_statistics<3>(m);
-
-  return m.ptr();
 }
