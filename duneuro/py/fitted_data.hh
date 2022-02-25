@@ -1,8 +1,8 @@
 #ifndef DUNEURO_PY_FITTED_DATA_HH
 #define DUNEURO_PY_FITTED_DATA_HH
 
-#include <pybind11/numpy.h>
-#include <pybind11/pybind11.h>
+#include <dune/python/pybind11/numpy.h>
+#include <dune/python/pybind11/pybind11.h>
 
 #include <duneuro/common/fitted_driver_data.hh>
 

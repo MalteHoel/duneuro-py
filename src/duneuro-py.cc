@@ -6,10 +6,10 @@
 
 #include <memory>
 
-#include <pybind11/numpy.h>
-#include <pybind11/operators.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <dune/python/pybind11/numpy.h>
+#include <dune/python/pybind11/operators.h>
+#include <dune/python/pybind11/pybind11.h>
+#include <dune/python/pybind11/stl.h>
 
 #include <dune/common/parametertree.hh>
 #include <dune/common/parametertreeparser.hh>
@@ -147,6 +147,7 @@ void register_field_vector(py::module& m)
       .def(py::init<T>())
       .def(py::init(
         [] (py::array_t<T> array) {
+        	std::cout << "Pybind Version : " << PYBIND11_VERSION_MAJOR << "." << PYBIND11_VERSION_MINOR << std::endl;
           if (array.size() != dim) {
             DUNE_THROW(Dune::Exception, "array has to have size " << dim << " but got" << array.size());
           }

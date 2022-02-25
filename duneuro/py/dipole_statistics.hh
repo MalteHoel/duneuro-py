@@ -1,7 +1,7 @@
 #ifndef DUNEURO_PY_DIPOLE_STATISTICS_HH
 #define DUNEURO_PY_DIPOLE_STATISTICS_HH
 
-#include <pybind11/pybind11.h>
+#include <dune/python/pybind11/pybind11.h>
 
 #include <duneuro/common/dipole_statistics.hh>
 #include <duneuro/common/dipole_statistics_factory.hh>
