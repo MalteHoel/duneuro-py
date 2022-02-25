@@ -3,7 +3,7 @@
 
 #include <map>
 
-#include <pybind11/pybind11.h>
+#include <dune/python/pybind11/pybind11.h>
 
 #include <dune/common/parametertree.hh>
 

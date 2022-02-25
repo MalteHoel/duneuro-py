@@ -6,10 +6,10 @@
 
 #include <memory>
 
-#include <pybind11/numpy.h>
-#include <pybind11/operators.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <dune/python/pybind11/numpy.h>
+#include <dune/python/pybind11/operators.h>
+#include <dune/python/pybind11/pybind11.h>
+#include <dune/python/pybind11/stl.h>
 
 #include <dune/common/parametertree.hh>
 #include <dune/common/parametertreeparser.hh>
