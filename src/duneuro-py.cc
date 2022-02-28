@@ -192,8 +192,8 @@ void register_dipole(py::module& m)
       "a class representing a mathematical dipole consisting of a position and moment")
       .def(py::init<FieldVector, FieldVector>(), "create a dipole from its position and moment",
            py::arg("position"), py::arg("moment"))
-      .def("__init__",
-           [](Dipole& instance, py::array_t<T> pos, py::array_t<T> mom) {
+      .def(py::init(
+           [](py::array_t<T> pos, py::array_t<T> mom) {
              if (pos.size() != dim || pos.ndim() != 1)
                DUNE_THROW(Dune::Exception, "position has to have " << dim << " entries");
              if (mom.size() != dim || pos.ndim() != 1)
@@ -201,9 +201,25 @@ void register_dipole(py::module& m)
              FieldVector vpos, vmom;
              std::copy(pos.data(), pos.data() + dim, vpos.begin());
              std::copy(mom.data(), mom.data() + dim, vmom.begin());
-             new (&instance) Dipole(vpos, vmom);
-           },
-           "create a dipole from its position and moment", py::arg("position"), py::arg("moment"))
+             return Dipole(vpos, vmom);
+           }), // end definition of lambda
+           "create a dipole from its position and moment", py::arg("position"), py::arg("moment")
+      ) // end definition of constructor
+      .def(py::init(
+           [](py::array_t<T> pos_and_mom) {
+             if(pos_and_mom.size() != 2 * dim || pos_and_mom.ndim() != 1) {
+               DUNE_THROW(Dune::Exception, "combined buffer has to be 1-dimensional with" << 2 * dim << " entries");
+             }
+
+             FieldVector vpos, vmom;
+             const T* data_ptr = pos_and_mom.data();
+             std::copy(data_ptr, data_ptr + dim, vpos.begin());
+             std::copy(data_ptr + dim, data_ptr + 2*dim, vmom.begin());
+             return Dipole(vpos, vmom);
+           }), // end definition of lambda
+           "create a dipole from an array or list containing both its position and moment, where we assume the position is given first",
+           py::arg("combined position and moment")
+      ) // end definition of constructor
       .def("position", &Dipole::position, "return the dipole position",
            py::return_value_policy::reference_internal)
       .def("moment", &Dipole::moment, "return the dipole moment",
@@ -298,11 +314,11 @@ void register_unfitted_statistics(py::module& m)
   using US = duneuro::UnfittedStatistics<dim>;
   auto name = "UnfittedStatistics" + std::to_string(dim) + "d";
   py::class_<US>(m, name.c_str(), "statistics of an unfitted discretization")
-      .def("__init__",
-           [](US& instance, py::dict d) {
+      .def(py::init(
+           [](py::dict d) {
              auto ud = extractUnfittedDataFromMainDict<dim>(d);
-             new (&instance) US(ud, duneuro::toParameterTree(d));
-           })
+             return US(ud, duneuro::toParameterTree(d));
+           }))
       .def("interfaceValues", &US::interfaceValues, "evaluate the interfaces at a given position.");
 }
 
@@ -676,9 +692,9 @@ static inline void register_patch_set(py::module& m)
   using PS = duneuro::PatchSet<T, dim>;
   std::stringstream name;
   name << "PatchSet" << dim << "d";
-  py::class_<PS>(m, name.str().c_str()).def("__init__", [](PS& instance, py::dict d) {
-    new (&instance) PS(duneuro::toParameterTree(d));
-  });
+  py::class_<PS>(m, name.str().c_str()).def(py::init([](py::dict d) {
+    return PS(duneuro::toParameterTree(d));
+  }));
 }
 
 template <int dim>
