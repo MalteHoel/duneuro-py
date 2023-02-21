@@ -360,6 +360,21 @@ public:
     return duneuro::toPyDict(storage->tree);
   }
 
+  void writer_add_vertex_data(const duneuro::Function& function, std::string dataName)
+  {
+    driver_->writer_add_vertex_data(function, dataName);
+  }
+  
+  void writer_add_cell_data(const duneuro::Function& function, std::string dataName)
+  {
+    driver_->writer_add_cell_data(function, dataName);
+  }
+
+  void write_memory_optimized(py::dict config) const
+  {
+    driver_->write_memory_optimized(duneuro::toParameterTree(config));
+  }
+
   void setElectrodes(const std::vector<typename Interface::CoordinateType>& electrodes,
                      py::dict config)
   {
@@ -595,6 +610,12 @@ solve the eeg forward problem and store the result in the given function
            /* "solve the meg forward problem and return the solution" */)
       .def("write", write1(&Interface::write))
       .def("write", write2(&Interface::write))
+      .def("writer_add_vertex_data", &Interface::writer_add_vertex_data,
+           "add vertex data for visuaization")
+      .def("writer_add_cell_data", &Interface::writer_add_cell_data,
+           "add cell data for visualization. Given a domain function u, the vector field sigma * grad u will be visualized, where sigma is the conductivity tensor")
+      .def("write_memory_optimized", &Interface::write_memory_optimized,
+           "write the volume conductor (and the supplied vertex and cell data) in the vtu format")
       .def("setElectrodes", &Interface::setElectrodes,
            "set the electrodes. subsequent calls to evaluateAtElectrodes will use these "
            "electrodes.",
