@@ -147,6 +147,7 @@ void register_field_vector(py::module& m)
       .def(py::init<T>())
       .def(py::init(
         [] (py::array_t<T> array) {
+        	std::cout << "Pybind Version : " << PYBIND11_VERSION_MAJOR << "." << PYBIND11_VERSION_MINOR << std::endl;
           if (array.size() != dim) {
             DUNE_THROW(Dune::Exception, "array has to have size " << dim << " but got" << array.size());
           }
