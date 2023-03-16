@@ -324,6 +324,52 @@ void register_unfitted_statistics(py::module& m)
 
 #endif
 
+class VolumeVTKWriter {
+public:
+  explicit VolumeVTKWriter(std::unique_ptr<duneuro::VolumeConductorVTKWriterInterface> volumeWriterPtr)
+  : volumeWriterPtr_(std::move(volumeWriterPtr))
+  {
+  }
+  
+  void addVertexData(const duneuro::Function& function, const std::string& name)
+  {
+    volumeWriterPtr_->addVertexData(function, name);
+  }
+  
+  void addVertexDataGradient(const duneuro::Function& function, const std::string& name)
+  {
+    volumeWriterPtr_->addVertexDataGradient(function, name);
+  }
+  
+  void addCellData(const duneuro::Function& function, const std::string& name)
+  {
+    volumeWriterPtr_->addCellData(function, name);
+  }
+  
+  void addCellDataGradient(const duneuro::Function& function, const std::string& name)
+  {
+    volumeWriterPtr_->addCellDataGradient(function, name);
+  }
+  
+  void write(py::dict d) {
+    volumeWriterPtr_->write(duneuro::toParameterTree(d));
+  }
+  
+private:
+  std::unique_ptr<duneuro::VolumeConductorVTKWriterInterface> volumeWriterPtr_;
+};
+
+void register_volume_vtk_writer(py::module& m)
+{
+  std::string name = "VolumeVTKWriter";
+  py::class_<VolumeVTKWriter>(m, name.c_str(), "write a volume conductor and associated grid functions in the VTK format")
+    .def("addVertexData", &VolumeVTKWriter::addVertexData, "evaluate the given function on each grid vertex")
+    .def("addVertexData", &VolumeVTKWriter::addVertexDataGradient, "evaluate the gradient of the given function on each grid vertex")
+    .def("addCellData", &VolumeVTKWriter::addCellData, "evaluate the given function at the center of each cell")
+    .def("addCellDataGradient", &VolumeVTKWriter::addCellDataGradient, "evaluate the gradient of the given function at the center of each cell")
+    .def("write", &VolumeVTKWriter::write, "write output");
+}
+
 template <int dim>
 class PyMEEGDriverInterface
 {
@@ -362,18 +408,9 @@ public:
     return {result, duneuro::toPyDict(storage->tree)};
   }
 
-  py::dict write(const duneuro::Function& solution, py::dict config) const
+  VolumeVTKWriter volumeConductorVTKWriter(py::dict config)
   {
-    auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->write(solution, duneuro::toParameterTree(config), duneuro::DataTree(storage));
-    return duneuro::toPyDict(storage->tree);
-  }
-
-  py::dict write(py::dict config) const
-  {
-    auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->write(duneuro::toParameterTree(config), duneuro::DataTree(storage));
-    return duneuro::toPyDict(storage->tree);
+    return VolumeVTKWriter(driver_->volumeConductorVTKWriter(duneuro::toParameterTree(config)));
   }
 
   void setElectrodes(const std::vector<typename Interface::CoordinateType>& electrodes,
@@ -458,8 +495,6 @@ template <int dim>
 static inline void register_meeg_driver_interface(py::module& m)
 {
   using Interface = PyMEEGDriverInterface<dim>;
-  using write1 = py::dict (Interface::*)(const duneuro::Function&, py::dict) const;
-  using write2 = py::dict (Interface::*)(py::dict) const;
   std::stringstream classname;
   classname << "MEEGDriver" << dim << "d";
   py::class_<Interface>(m, classname.str().c_str())
@@ -609,8 +644,7 @@ solve the eeg forward problem and store the result in the given function
       .def("solveMEGForward", &Interface::solveMEGForward
            /* , */
            /* "solve the meg forward problem and return the solution" */)
-      .def("write", write1(&Interface::write))
-      .def("write", write2(&Interface::write))
+      .def("volumeConductorVTKWriter", &Interface::volumeConductorVTKWriter, "return a VTK writer for this volume conductor")
       .def("setElectrodes", &Interface::setElectrodes,
            "set the electrodes. subsequent calls to evaluateAtElectrodes will use these "
            "electrodes.",
@@ -718,18 +752,9 @@ public:
     return driver_->makeDomainFunction();
   }
 
-  py::dict write(py::dict config) const
+  VolumeVTKWriter volumeConductorVTKWriter(py::dict config)
   {
-    auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->write(duneuro::toParameterTree(config), duneuro::DataTree(storage));
-    return duneuro::toPyDict(storage->tree);
-  }
-
-  py::dict write(const duneuro::Function& solution, py::dict config) const
-  {
-    auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->write(solution, duneuro::toParameterTree(config), duneuro::DataTree(storage));
-    return duneuro::toPyDict(storage->tree);
+    return VolumeVTKWriter(driver_->volumeConductorVTKWriter(duneuro::toParameterTree(config)));
   }
 
   py::dict solveTDCSForward(duneuro::Function& solution, py::dict config) const
@@ -754,9 +779,7 @@ static inline void register_tdcs_driver_interface(py::module& m)
   py::class_<Interface>(m, classname.str().c_str())
       .def(py::init<duneuro::PatchSet<double, dim>, py::dict>())
       .def("makeDomainFunction", &Interface::makeDomainFunction, "create a domain function")
-      .def("write", [](Interface& instance, py::dict config) { instance.write(config); })
-      .def("write", [](Interface& instance, const duneuro::Function& solution,
-                       py::dict config) { instance.write(solution, config); })
+      .def("volumeConductorVTKWriter", &Interface::volumeConductorVTKWriter, "return a VTK writer for this volume conductor")
       .def("solveTDCSForward", &Interface::solveTDCSForward);
 }
 
@@ -767,6 +790,8 @@ PYBIND11_MODULE(duneuropy, m)
   register_exceptions();
 
   register_function(m);
+
+  register_volume_vtk_writer(m);
 
   register_dense_matrix<double>(m);
 
