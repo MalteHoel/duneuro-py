@@ -34,6 +34,8 @@
 
 namespace py = pybind11;
 
+using namespace pybind11::literals;
+
 static inline void register_exceptions()
 {
   py::register_exception_translator([](std::exception_ptr p) {
@@ -502,6 +504,49 @@ public:
      driver_->print_citations();
   }
 
+  // assume all elements have the same number of vertices
+  py::dict exportVolumeConductor()
+  {
+    auto mesh = driver_->exportVolumeConductor();
+    const std::vector<typename Interface::CoordinateType>& nodeVector = std::get<0>(mesh);
+    const std::vector<std::vector<size_t>>& elementVector = std::get<1>(mesh);
+    const std::vector<size_t>& labelVector = std::get<2>(mesh);
+    const std::vector<double>& condVector = std::get<3>(mesh);
+    size_t nr_nodes = nodeVector.size();
+    size_t nr_elements = elementVector.size();
+    size_t nr_vertices_per_element = elementVector[0].size();
+    size_t nr_tensors = condVector.size();
+    
+    py::array_t<double> nodes(std::vector<size_t>({nr_nodes, dim}));
+    py::array_t<size_t> elements(std::vector<size_t>({nr_elements, nr_vertices_per_element}));
+    py::array_t<size_t> labels(std::vector<size_t>({nr_elements}));
+    py::array_t<double> conductivities(std::vector<size_t>({nr_tensors}));
+    
+    auto node_proxy = nodes.mutable_unchecked<2>();
+    for(size_t i = 0; i < nr_nodes; ++i) {
+      for(size_t j = 0; j < dim; ++j) {
+        node_proxy(i, j) = nodeVector[i][j];
+      }
+    }
+    
+    auto element_proxy = elements.mutable_unchecked<2>();
+    auto label_proxy = labels.mutable_unchecked<1>();
+    
+    for(size_t i = 0; i < nr_elements; ++i) {
+      for(size_t j = 0; j < nr_vertices_per_element; ++j) {
+        element_proxy(i, j) = elementVector[i][j];
+      }
+      label_proxy(i) = labelVector[i];
+    }
+    
+    auto cond_proxy = conductivities.mutable_unchecked<1>();
+    for(size_t i = 0; i < nr_tensors; ++i) {
+      cond_proxy(i) = condVector[i];
+    }
+    
+    return py::dict("nodes"_a = nodes, "elements"_a = elements, "labels"_a = labels, "conductivities"_a = conductivities);
+  }
+
 private:
   std::unique_ptr<Interface> driver_;
   Dune::ParameterTree tree_;
@@ -683,6 +728,7 @@ solve the eeg forward problem and store the result in the given function
       .def("applyMEGTransfer", &Interface::applyMEGTransfer, "apply the meg transfer matrix",
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
       .def("statistics", &Interface::statistics, "compute driver statistics")
+      .def("exportVolumeConductor", &Interface::exportVolumeConductor, "export the underlying volume conductor as a dictionary containing the node positions, elements via node indices, element labels, and conductivities")
       .def("print_citations", &Interface::print_citations, "list relevant publications");
 }
 
