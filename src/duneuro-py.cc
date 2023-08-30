@@ -546,6 +546,69 @@ public:
     
     return py::dict("nodes"_a = nodes, "elements"_a = elements, "labels"_a = labels, "conductivities"_a = conductivities);
   }
+  
+  // assume all elements have the same number of vertices
+  py::dict exportVolumeConductorAndFunction(const duneuro::Function& solution)
+  {
+    auto vc_and_function = driver_->exportVolumeConductorAndFunction(&solution);
+    const std::vector<typename Interface::CoordinateType>& nodeVector = std::get<0>(vc_and_function);
+    const std::vector<std::vector<size_t>>& elementVector = std::get<1>(vc_and_function);
+    const std::vector<size_t>& labelVector = std::get<2>(vc_and_function);
+    const std::vector<double>& condVector = std::get<3>(vc_and_function);
+    const std::vector<double>& nodeValueVector = std::get<4>(vc_and_function);
+    const std::vector<typename Interface::CoordinateType>& electricalFieldVector = std::get<5>(vc_and_function);
+    const std::vector<typename Interface::CoordinateType>& currentDensityVector = std::get<6>(vc_and_function);
+    
+    size_t nr_nodes = nodeVector.size();
+    size_t nr_elements = elementVector.size();
+    size_t nr_vertices_per_element = elementVector[0].size();
+    size_t nr_tensors = condVector.size();
+    
+    py::array_t<double> nodes(std::vector<size_t>({nr_nodes, dim}));
+    py::array_t<size_t> elements(std::vector<size_t>({nr_elements, nr_vertices_per_element}));
+    py::array_t<size_t> labels(std::vector<size_t>({nr_elements}));
+    py::array_t<double> conductivities(std::vector<size_t>({nr_tensors}));
+    py::array_t<double> potentialAtNodes(std::vector<size_t>({nr_nodes}));
+    py::array_t<double> electricalFieldAtElementCenters(std::vector<size_t>({nr_elements, dim}));
+    py::array_t<double> currentDensityAtElementCenters(std::vector<size_t>({nr_elements, dim}));
+    
+    auto node_proxy = nodes.mutable_unchecked<2>();
+    auto potential_proxy = potentialAtNodes.mutable_unchecked<1>();
+    
+    for(size_t i = 0; i < nr_nodes; ++i) {
+      for(size_t j = 0; j < dim; ++j) {
+        node_proxy(i, j) = nodeVector[i][j];
+      }
+      
+      potential_proxy(i) = nodeValueVector[i];
+    }
+    
+    auto element_proxy = elements.mutable_unchecked<2>();
+    auto label_proxy = labels.mutable_unchecked<1>();
+    auto e_field_proxy = electricalFieldAtElementCenters.mutable_unchecked<2>();
+    auto current_density_proxy = currentDensityAtElementCenters.mutable_unchecked<2>();
+    
+    for(size_t i = 0; i < nr_elements; ++i) {
+      for(size_t j = 0; j < nr_vertices_per_element; ++j) {
+        element_proxy(i, j) = elementVector[i][j];
+      }
+      label_proxy(i) = labelVector[i];
+      
+      for(size_t j = 0; j < dim; ++j) {
+        e_field_proxy(i, j) = electricalFieldVector[i][j];
+        current_density_proxy(i, j) = currentDensityVector[i][j];
+      }
+    }
+    
+    auto cond_proxy = conductivities.mutable_unchecked<1>();
+    for(size_t i = 0; i < nr_tensors; ++i) {
+      cond_proxy(i) = condVector[i];
+    }
+    
+    return py::dict("nodes"_a = nodes, "elements"_a = elements, "labels"_a = labels, "conductivities"_a = conductivities, 
+                    "potentialAtNodes"_a = potentialAtNodes, "electricalFieldAtElementCenters"_a = electricalFieldAtElementCenters,
+                    "currentDensityAtElementCenters"_a = currentDensityAtElementCenters);
+  }
 
 private:
   std::unique_ptr<Interface> driver_;
@@ -729,6 +792,7 @@ solve the eeg forward problem and store the result in the given function
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
       .def("statistics", &Interface::statistics, "compute driver statistics")
       .def("exportVolumeConductor", &Interface::exportVolumeConductor, "export the underlying volume conductor as a dictionary containing the node positions, elements via node indices, element labels, and conductivities")
+      .def("exportVolumeConductorAndFunction", &Interface::exportVolumeConductorAndFunction, "export the underlying volume conductor as a dictionary containing the node positions, elements via node indices, element labels, and conductivities. Additionally, the given function is interpreted as an electrical potential, and the values of the potential at the nodes, the values of the electrical field at the element centers, and the values of the current density at the element centers are exported.")
       .def("print_citations", &Interface::print_citations, "list relevant publications");
 }
 
