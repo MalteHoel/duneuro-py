@@ -516,6 +516,12 @@ public:
   {
      driver_->print_citations();
   }
+  
+  py::dict constructRegularSourceSpace(const double gridSize, const std::vector<size_t> sourceCompartments, py::dict config)
+  {
+    std::pair<std::vector<typename Interface::CoordinateType>, std::vector<size_t>> sourceSpace = driver_->constructRegularSourceSpace(gridSize, sourceCompartments, duneuro::toParameterTree(config));
+    return py::dict("source_positions"_a = std::get<0>(sourceSpace), "element_indices"_a = std::get<1>(sourceSpace));
+  }
 
 private:
   std::unique_ptr<Interface> driver_;
@@ -699,6 +705,13 @@ solve the eeg forward problem and store the result in the given function
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
       .def("computeMEGPrimaryField", &Interface::computeMEGPrimaryField, "compute the primary B field for the given dipoles", py::arg("dipoles"), py::arg("config"))
       .def("statistics", &Interface::statistics, "compute driver statistics")
+<<<<<<< HEAD
+=======
+      .def("exportVolumeConductor", &Interface::exportVolumeConductor, "export the underlying volume conductor as a dictionary containing the node positions, elements via node indices, element labels, and conductivities")
+      .def("exportVolumeConductorAndFunction", &Interface::exportVolumeConductorAndFunction, "export the underlying volume conductor as a dictionary containing the node positions, elements via node indices, element labels, and conductivities. Additionally, the given function is interpreted as an electrical potential, and the values of the potential at the nodes, the values of the electrical field at the element centers, and the values of the current density at the element centers are exported.")
+      .def("computePower", &Interface::computePower, "compute the electrical power dissipation of a given EEG forward solution")
+      .def("constructRegularSourceSpace", &Interface::constructRegularSourceSpace, "construct regular volumetric source space for a given volume conductor and source compartments")
+>>>>>>> 28dad03... add option to create source space
       .def("print_citations", &Interface::print_citations, "list relevant publications");
 }
 
