@@ -413,6 +413,21 @@ public:
     return VolumeVTKWriter(driver_->volumeConductorVTKWriter(duneuro::toParameterTree(config)));
   }
 
+  void writer_add_vertex_data(const duneuro::Function& function, std::string dataName)
+  {
+    driver_->writer_add_vertex_data(function, dataName);
+  }
+  
+  void writer_add_cell_data(const duneuro::Function& function, std::string dataName)
+  {
+    driver_->writer_add_cell_data(function, dataName);
+  }
+
+  void write_memory_optimized(py::dict config) const
+  {
+    driver_->write_memory_optimized(duneuro::toParameterTree(config));
+  }
+
   void setElectrodes(const std::vector<typename Interface::CoordinateType>& electrodes,
                      py::dict config)
   {
