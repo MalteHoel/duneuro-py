@@ -47,9 +47,18 @@ static inline void register_exceptions()
 }
 
 struct ParameterTreeStorage : public duneuro::StorageInterface {
+public:
+  explicit ParameterTreeStorage(int verbose = 0)
+   : verbose_(verbose)
+  {
+  }
+
   virtual void store(const std::string& name, const std::string& value)
   {
     std::lock_guard<std::mutex> lock(mutex);
+    if (verbose_ >= 1) {
+      std::cout << name << " = " << value << "\n";
+    }
     tree[name] = value;
   }
 
@@ -65,6 +74,7 @@ struct ParameterTreeStorage : public duneuro::StorageInterface {
 
   Dune::ParameterTree tree;
   std::mutex mutex;
+  int verbose_;
 };
 
 std::unique_ptr<duneuro::DenseMatrix<double>> toDenseMatrix(py::buffer buffer)
@@ -393,7 +403,8 @@ public:
   py::dict solveEEGForward(const typename Interface::DipoleType& dipole,
                            duneuro::Function& solution, py::dict config)
   {
-    auto storage = std::make_shared<ParameterTreeStorage>();
+    int verbose = config.contains("solver") && config["solver"].contains("verbose") ? py::int_(config["solver"]["verbose"]).cast<int>() : 0;
+    auto storage = std::make_shared<ParameterTreeStorage>(verbose);
     driver_->solveEEGForward(dipole, solution, duneuro::toParameterTree(config),
                              duneuro::DataTree(storage));
     return duneuro::toPyDict(storage->tree);
@@ -402,7 +413,8 @@ public:
   std::pair<std::vector<double>, py::dict> solveMEGForward(const duneuro::Function& eegSolution,
                                                            py::dict config)
   {
-    auto storage = std::make_shared<ParameterTreeStorage>();
+    int verbose = config.contains("solver") && config["solver"].contains("verbose") ? py::int_(config["solver"]["verbose"]).cast<int>() : 0;
+    auto storage = std::make_shared<ParameterTreeStorage>(verbose);
     auto result = driver_->solveMEGForward(eegSolution, duneuro::toParameterTree(config),
                                            duneuro::DataTree(storage));
     return {result, duneuro::toPyDict(storage->tree)};
@@ -453,7 +465,8 @@ public:
 
   std::pair<duneuro::DenseMatrix<double>*, py::dict> computeEEGTransferMatrix(py::dict config)
   {
-    auto storage = std::make_shared<ParameterTreeStorage>();
+    int verbose = config.contains("solver") && config["solver"].contains("verbose") ? py::int_(config["solver"]["verbose"]).cast<int>() : 0;
+    auto storage = std::make_shared<ParameterTreeStorage>(verbose);
     std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->computeEEGTransferMatrix(
         duneuro::toParameterTree(config), duneuro::DataTree(storage));
     return {result.release(), duneuro::toPyDict(storage->tree)};
@@ -461,7 +474,8 @@ public:
 
   std::pair<duneuro::DenseMatrix<double>*, py::dict> computeMEGTransferMatrix(py::dict config)
   {
-    auto storage = std::make_shared<ParameterTreeStorage>();
+    int verbose = config.contains("solver") && config["solver"].contains("verbose") ? py::int_(config["solver"]["verbose"]).cast<int>() : 0;
+    auto storage = std::make_shared<ParameterTreeStorage>(verbose);
     std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->computeMEGTransferMatrix(
         duneuro::toParameterTree(config), duneuro::DataTree(storage));
     return {result.release(), duneuro::toPyDict(storage->tree)};
@@ -471,8 +485,9 @@ public:
   applyEEGTransfer(py::buffer buffer, const std::vector<typename Interface::DipoleType>& dipoles,
                    py::dict config)
   {
+    int verbose = config.contains("solver") && config["solver"].contains("verbose") ? py::int_(config["solver"]["verbose"]).cast<int>() : 0;
     auto transferMatrix = toDenseMatrix(buffer);
-    auto storage = std::make_shared<ParameterTreeStorage>();
+    auto storage = std::make_shared<ParameterTreeStorage>(verbose);
     auto result = driver_->applyEEGTransfer(
         *transferMatrix, dipoles, duneuro::toParameterTree(config), duneuro::DataTree(storage));
     return {result, duneuro::toPyDict(storage->tree)};
@@ -482,8 +497,9 @@ public:
   applyMEGTransfer(py::buffer buffer, const std::vector<typename Interface::DipoleType>& dipoles,
                    py::dict config)
   {
+    int verbose = config.contains("solver") && config["solver"].contains("verbose") ? py::int_(config["solver"]["verbose"]).cast<int>() : 0;
     auto transferMatrix = toDenseMatrix(buffer);
-    auto storage = std::make_shared<ParameterTreeStorage>();
+    auto storage = std::make_shared<ParameterTreeStorage>(verbose);
     auto result = driver_->applyMEGTransfer(
         *transferMatrix, dipoles, duneuro::toParameterTree(config), duneuro::DataTree(storage));
     return {result, duneuro::toPyDict(storage->tree)};
@@ -774,7 +790,8 @@ public:
 
   py::dict solveTDCSForward(duneuro::Function& solution, py::dict config) const
   {
-    auto storage = std::make_shared<ParameterTreeStorage>();
+    int verbose = config.contains("solver") && config["solver"].contains("verbose") ? py::int_(config["solver"]["verbose"]).cast<int>() : 0;
+    auto storage = std::make_shared<ParameterTreeStorage>(verbose);
     driver_->solveTDCSForward(solution, duneuro::toParameterTree(config),
                               duneuro::DataTree(storage));
     return duneuro::toPyDict(storage->tree);
