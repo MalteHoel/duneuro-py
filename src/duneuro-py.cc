@@ -490,6 +490,11 @@ public:
     return {result, duneuro::toPyDict(storage->tree)};
   }
 
+  std::vector<std::vector<double>> computeMEGPrimaryField(const std::vector<typename Interface::DipoleType>& dipoles, py::dict config)
+  {
+    return driver_->computeMEGPrimaryField(dipoles, duneuro::toParameterTree(config));
+  }
+
   py::dict statistics()
   {
     auto storage = std::make_shared<ParameterTreeStorage>();
@@ -682,6 +687,7 @@ solve the eeg forward problem and store the result in the given function
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
       .def("applyMEGTransfer", &Interface::applyMEGTransfer, "apply the meg transfer matrix",
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
+      .def("computeMEGPrimaryField", &Interface::computeMEGPrimaryField, "compute the primary B field for the given dipoles", py::arg("dipoles"), py::arg("config"))
       .def("statistics", &Interface::statistics, "compute driver statistics")
       .def("print_citations", &Interface::print_citations, "list relevant publications");
 }
