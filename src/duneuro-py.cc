@@ -492,6 +492,11 @@ public:
     return {result, duneuro::toPyDict(storage->tree)};
   }
 
+  std::vector<std::vector<double>> computeMEGPrimaryField(const std::vector<typename Interface::DipoleType>& dipoles, py::dict config)
+  {
+    return driver_->computeMEGPrimaryField(dipoles, duneuro::toParameterTree(config));
+  }
+
   py::dict statistics()
   {
     auto storage = std::make_shared<ParameterTreeStorage>();
@@ -795,6 +800,7 @@ solve the eeg forward problem and store the result in the given function
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
       .def("applyMEGTransfer", &Interface::applyMEGTransfer, "apply the meg transfer matrix",
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
+      .def("computeMEGPrimaryField", &Interface::computeMEGPrimaryField, "compute the primary B field for the given dipoles", py::arg("dipoles"), py::arg("config"))
       .def("statistics", &Interface::statistics, "compute driver statistics")
       .def("exportVolumeConductor", &Interface::exportVolumeConductor, "export the underlying volume conductor as a dictionary containing the node positions, elements via node indices, element labels, and conductivities")
       .def("exportVolumeConductorAndFunction", &Interface::exportVolumeConductorAndFunction, "export the underlying volume conductor as a dictionary containing the node positions, elements via node indices, element labels, and conductivities. Additionally, the given function is interpreted as an electrical potential, and the values of the potential at the nodes, the values of the electrical field at the element centers, and the values of the current density at the element centers are exported.")
