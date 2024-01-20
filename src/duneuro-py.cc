@@ -166,8 +166,10 @@ void register_field_vector(py::module& m)
             DUNE_THROW(Dune::Exception, "array has to have dim " << 1 << " but got " << array.ndim());
           }
           FieldVector vector(0.0);
-          const T* data_ptr = array.data();
-          std::copy(data_ptr, data_ptr + dim, vector.begin());
+          auto array_accessor = array.template unchecked<1>();
+          for(size_t i = 0; i < dim; ++i) {
+            vector[i] = array_accessor(i);
+          }
           return vector;
         }), // end definition of lambda
         "create a vector from any python buffer, such as a numpy array"
@@ -211,8 +213,12 @@ void register_dipole(py::module& m)
              if (mom.size() != dim || pos.ndim() != 1)
                DUNE_THROW(Dune::Exception, "moment has to have " << dim << " entries");
              FieldVector vpos, vmom;
-             std::copy(pos.data(), pos.data() + dim, vpos.begin());
-             std::copy(mom.data(), mom.data() + dim, vmom.begin());
+             auto pos_accessor = pos.template unchecked<1>();
+             auto mom_accessor = mom.template unchecked<1>();
+             for(size_t i = 0; i < dim; ++i) {
+              vpos[i] = pos_accessor(i);
+              vmom[i] = mom_accessor(i);
+             }
              return Dipole(vpos, vmom);
            }), // end definition of lambda
            "create a dipole from its position and moment", py::arg("position"), py::arg("moment")
@@ -224,9 +230,13 @@ void register_dipole(py::module& m)
              }
 
              FieldVector vpos, vmom;
-             const T* data_ptr = pos_and_mom.data();
-             std::copy(data_ptr, data_ptr + dim, vpos.begin());
-             std::copy(data_ptr + dim, data_ptr + 2*dim, vmom.begin());
+             auto vector_accessor = pos_and_mom.template unchecked<1>();
+             for(size_t i = 0; i < dim; ++i) {
+              vpos[i] = vector_accessor(i);
+             }
+             for(size_t i = 0; i < dim; ++i) {
+              vmom[i] = vector_accessor(dim + i);
+             }
              return Dipole(vpos, vmom);
            }), // end definition of lambda
            "create a dipole from an array or list containing both its position and moment, where we assume the position is given first",
