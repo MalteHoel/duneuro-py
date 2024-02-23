@@ -10,6 +10,7 @@
 #include <dune/python/pybind11/operators.h>
 #include <dune/python/pybind11/pybind11.h>
 #include <dune/python/pybind11/stl.h>
+#include <dune/python/pybind11/eigen.h>
 
 #include <dune/common/parametertree.hh>
 #include <dune/common/parametertreeparser.hh>
@@ -31,6 +32,8 @@
 #include <duneuro/udg/hexahedralization.hh>
 #include <duneuro/udg/unfitted_statistics.hh>
 #endif
+
+#include <duneuro/inverse/inverse_solver.hh>
 
 namespace py = pybind11;
 
@@ -919,6 +922,8 @@ private:
   Dune::ParameterTree tree_;
 };
 
+
+
 template <int dim>
 static inline void register_tdcs_driver_interface(py::module& m)
 {
@@ -930,6 +935,44 @@ static inline void register_tdcs_driver_interface(py::module& m)
       .def("makeDomainFunction", &Interface::makeDomainFunction, "create a domain function")
       .def("volumeConductorVTKWriter", &Interface::volumeConductorVTKWriter, "return a VTK writer for this volume conductor")
       .def("solveTDCSForward", &Interface::solveTDCSForward);
+}
+
+class PyInverseSolver {
+public:
+  using InverseSolver = duneuro::InverseSolver<3, double>;
+
+  explicit PyInverseSolver(py::dict d)
+  {
+    inverseSolver_ = std::make_unique<InverseSolver>(duneuro::toParameterTree(d));
+  }
+  
+  std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd> svd(const Eigen::MatrixXd& matrix)
+  {
+    return inverseSolver_->getSVD(matrix);
+  }
+  
+  void bindLeadField(const Eigen::MatrixXd& leadfield, int dofsPerSource)
+  {
+    inverseSolver_->bindLeadField(leadfield, dofsPerSource);
+  }
+  
+  std::tuple<std::vector<double>, std::vector<Eigen::Vector3d>> dipoleScan(const Eigen::VectorXd& topography, py::dict dipoleScanConfig)
+  {
+    return inverseSolver_->dipoleScan(topography, duneuro::toParameterTree(dipoleScanConfig));
+  }
+  
+private:
+  std::unique_ptr<InverseSolver> inverseSolver_;
+};
+
+static inline void register_inverse_solver(py::module& m)
+{
+  using Solver = PyInverseSolver;
+  py::class_<Solver>(m, "InverseSolver")
+    .def(py::init<py::dict>())
+    .def("svd", &Solver::svd, "print some random text")
+    .def("bindLeadField", &Solver::bindLeadField, "bind lead field to inverse solver")
+    .def("dipoleScan", &Solver::dipoleScan, "perform a dipole scan");
 }
 
 PYBIND11_MODULE(duneuropy, m)
@@ -975,4 +1018,6 @@ PYBIND11_MODULE(duneuropy, m)
   register_unfitted_statistics<3>(m);
 #endif
   duneuro::register_dipole_statistics<3>(m);
+  
+  register_inverse_solver(m);
 }
