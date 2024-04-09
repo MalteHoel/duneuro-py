@@ -946,19 +946,39 @@ public:
     inverseSolver_ = std::make_unique<InverseSolver>(duneuro::toParameterTree(d));
   }
   
-  std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd> svd(const Eigen::MatrixXd& matrix)
-  {
-    return inverseSolver_->getSVD(matrix);
-  }
-  
   void bindLeadField(const Eigen::MatrixXd& leadfield, int dofsPerSource)
   {
     inverseSolver_->bindLeadField(leadfield, dofsPerSource);
   }
   
-  std::tuple<std::vector<double>, std::vector<Eigen::Vector3d>> dipoleScan(const Eigen::VectorXd& topography, py::dict dipoleScanConfig)
+  void bindSignalCovariance(const Eigen::MatrixXd& signalCovariance)
   {
-    return inverseSolver_->dipoleScan(topography, duneuro::toParameterTree(dipoleScanConfig));
+    inverseSolver_->bindSignalCovariance(signalCovariance);
+  }
+  
+  void bindNoiseCovariance(const Eigen::MatrixXd& noiseCovariance)
+  {
+    inverseSolver_->bindNoiseCovariance(noiseCovariance);
+  }
+  
+  std::tuple<std::vector<double>, std::vector<Eigen::Vector3d>> dipoleScan3d(const Eigen::VectorXd& topography, py::dict dipoleScanConfig)
+  {
+    return inverseSolver_->dipoleScan3d(topography, duneuro::toParameterTree(dipoleScanConfig));
+  }
+  
+  std::tuple<std::vector<double>, std::vector<Eigen::Vector3d>> scalarBeamforming3d(py::dict d)
+  {
+    return inverseSolver_->scalarBeamforming3d(duneuro::toParameterTree(d));
+  }
+  
+  std::tuple<std::vector<double>, std::vector<Eigen::Vector3d>> vectorSLORETA(const Eigen::VectorXd& topography, py::dict sLORETAConfig)
+  {
+    return inverseSolver_->vectorSLORETA(topography, duneuro::toParameterTree(sLORETAConfig));
+  }
+  
+  std::vector<Eigen::Vector3d> vectorMNE(const Eigen::VectorXd& topography, py::dict mneConfig)
+  {
+    return inverseSolver_->vectorMNE(topography, duneuro::toParameterTree(mneConfig));
   }
   
 private:
@@ -970,9 +990,13 @@ static inline void register_inverse_solver(py::module& m)
   using Solver = PyInverseSolver;
   py::class_<Solver>(m, "InverseSolver")
     .def(py::init<py::dict>())
-    .def("svd", &Solver::svd, "print some random text")
     .def("bindLeadField", &Solver::bindLeadField, "bind lead field to inverse solver")
-    .def("dipoleScan", &Solver::dipoleScan, "perform a dipole scan");
+    .def("bindSignalCovariance", &Solver::bindSignalCovariance, "bind a signal covariance matrix to the solver")
+    .def("bindNoiseCovariance", &Solver::bindNoiseCovariance, "bind a noise covariance matrix to the solver")
+    .def("dipoleScan3d", &Solver::dipoleScan3d, "perform a dipole scan")
+    .def("scalarBeamforming3d", &Solver::scalarBeamforming3d, "perform scalar beamformer scan")
+    .def("vectorSLORETA", &Solver::vectorSLORETA, "perform sLORETA scan")
+    .def("vectorMNE", &Solver::vectorMNE, "perform MNE reconstruction");
 }
 
 PYBIND11_MODULE(duneuropy, m)
