@@ -961,6 +961,11 @@ public:
     inverseSolver_->bindNoiseCovariance(noiseCovariance);
   }
   
+  void bindCustomMetricMatrix(const Eigen::MatrixXd& customMetricMatrix)
+  {
+    inverseSolver_->bindCustomMetricMatrix(customMetricMatrix);
+  }
+  
   std::tuple<std::vector<double>, std::vector<Eigen::Vector3d>> dipoleScan3d(const Eigen::VectorXd& topography, py::dict dipoleScanConfig)
   {
     return inverseSolver_->dipoleScan3d(topography, duneuro::toParameterTree(dipoleScanConfig));
@@ -993,6 +998,7 @@ static inline void register_inverse_solver(py::module& m)
     .def("bindLeadField", &Solver::bindLeadField, "bind lead field to inverse solver")
     .def("bindSignalCovariance", &Solver::bindSignalCovariance, "bind a signal covariance matrix to the solver")
     .def("bindNoiseCovariance", &Solver::bindNoiseCovariance, "bind a noise covariance matrix to the solver")
+    .def("bindCustomMetricMatrix", &Solver::bindCustomMetricMatrix, "bind a symmetric positive definite matrix defining an inner product norm")
     .def("dipoleScan3d", &Solver::dipoleScan3d, "perform a dipole scan")
     .def("scalarBeamforming3d", &Solver::scalarBeamforming3d, "perform scalar beamformer scan")
     .def("vectorSLORETA", &Solver::vectorSLORETA, "perform sLORETA scan")
