@@ -986,6 +986,11 @@ public:
     return inverseSolver_->vectorMNE(topography, duneuro::toParameterTree(mneConfig));
   }
   
+  std::vector<double> scanAverageExplainedVariance(const Eigen::MatrixXd& measurements, py::dict scanConfig)
+  {
+    return inverseSolver_->scanAverageExplainedVariance(measurements, duneuro::toParameterTree(scanConfig));
+  }
+  
 private:
   std::unique_ptr<InverseSolver> inverseSolver_;
 };
@@ -1002,7 +1007,8 @@ static inline void register_inverse_solver(py::module& m)
     .def("dipoleScan3d", &Solver::dipoleScan3d, "perform a dipole scan")
     .def("scalarBeamforming3d", &Solver::scalarBeamforming3d, "perform scalar beamformer scan")
     .def("vectorSLORETA", &Solver::vectorSLORETA, "perform sLORETA scan")
-    .def("vectorMNE", &Solver::vectorMNE, "perform MNE reconstruction");
+    .def("vectorMNE", &Solver::vectorMNE, "perform MNE reconstruction")
+    .def("scanAverageExplainedVariance", &Solver::scanAverageExplainedVariance, "compute for each source position the average explained variance in some Hilbert norm");
 }
 
 PYBIND11_MODULE(duneuropy, m)
