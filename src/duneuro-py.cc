@@ -10,6 +10,7 @@
 #include <dune/python/pybind11/operators.h>
 #include <dune/python/pybind11/pybind11.h>
 #include <dune/python/pybind11/stl.h>
+#include <dune/python/pybind11/eigen.h>
 
 #include <dune/common/parametertree.hh>
 #include <dune/common/parametertreeparser.hh>
@@ -31,6 +32,8 @@
 #include <duneuro/udg/hexahedralization.hh>
 #include <duneuro/udg/unfitted_statistics.hh>
 #endif
+
+#include <duneuro/inverse/inverse_solver.hh>
 
 namespace py = pybind11;
 
@@ -166,8 +169,10 @@ void register_field_vector(py::module& m)
             DUNE_THROW(Dune::Exception, "array has to have dim " << 1 << " but got " << array.ndim());
           }
           FieldVector vector(0.0);
-          const T* data_ptr = array.data();
-          std::copy(data_ptr, data_ptr + dim, vector.begin());
+          auto array_accessor = array.template unchecked<1>();
+          for(size_t i = 0; i < dim; ++i) {
+            vector[i] = array_accessor(i);
+          }
           return vector;
         }), // end definition of lambda
         "create a vector from any python buffer, such as a numpy array"
@@ -211,8 +216,12 @@ void register_dipole(py::module& m)
              if (mom.size() != dim || pos.ndim() != 1)
                DUNE_THROW(Dune::Exception, "moment has to have " << dim << " entries");
              FieldVector vpos, vmom;
-             std::copy(pos.data(), pos.data() + dim, vpos.begin());
-             std::copy(mom.data(), mom.data() + dim, vmom.begin());
+             auto pos_accessor = pos.template unchecked<1>();
+             auto mom_accessor = mom.template unchecked<1>();
+             for(size_t i = 0; i < dim; ++i) {
+              vpos[i] = pos_accessor(i);
+              vmom[i] = mom_accessor(i);
+             }
              return Dipole(vpos, vmom);
            }), // end definition of lambda
            "create a dipole from its position and moment", py::arg("position"), py::arg("moment")
@@ -224,9 +233,13 @@ void register_dipole(py::module& m)
              }
 
              FieldVector vpos, vmom;
-             const T* data_ptr = pos_and_mom.data();
-             std::copy(data_ptr, data_ptr + dim, vpos.begin());
-             std::copy(data_ptr + dim, data_ptr + 2*dim, vmom.begin());
+             auto vector_accessor = pos_and_mom.template unchecked<1>();
+             for(size_t i = 0; i < dim; ++i) {
+              vpos[i] = vector_accessor(i);
+             }
+             for(size_t i = 0; i < dim; ++i) {
+              vmom[i] = vector_accessor(dim + i);
+             }
              return Dipole(vpos, vmom);
            }), // end definition of lambda
            "create a dipole from an array or list containing both its position and moment, where we assume the position is given first",
@@ -490,6 +503,11 @@ public:
     auto result = driver_->applyMEGTransfer(
         *transferMatrix, dipoles, duneuro::toParameterTree(config), duneuro::DataTree(storage));
     return {result, duneuro::toPyDict(storage->tree)};
+  }
+
+  std::vector<std::vector<double>> computeMEGPrimaryField(const std::vector<typename Interface::DipoleType>& dipoles, py::dict config)
+  {
+    return driver_->computeMEGPrimaryField(dipoles, duneuro::toParameterTree(config));
   }
 
   py::dict statistics()
@@ -801,6 +819,7 @@ solve the eeg forward problem and store the result in the given function
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
       .def("applyMEGTransfer", &Interface::applyMEGTransfer, "apply the meg transfer matrix",
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
+      .def("computeMEGPrimaryField", &Interface::computeMEGPrimaryField, "compute the primary B field for the given dipoles", py::arg("dipoles"), py::arg("config"))
       .def("statistics", &Interface::statistics, "compute driver statistics")
       .def("exportVolumeConductor", &Interface::exportVolumeConductor, "export the underlying volume conductor as a dictionary containing the node positions, elements via node indices, element labels, and conductivities")
       .def("exportVolumeConductorAndFunction", &Interface::exportVolumeConductorAndFunction, "export the underlying volume conductor as a dictionary containing the node positions, elements via node indices, element labels, and conductivities. Additionally, the given function is interpreted as an electrical potential, and the values of the potential at the nodes, the values of the electrical field at the element centers, and the values of the current density at the element centers are exported.")
@@ -910,6 +929,8 @@ private:
   Dune::ParameterTree tree_;
 };
 
+
+
 template <int dim>
 static inline void register_tdcs_driver_interface(py::module& m)
 {
@@ -921,6 +942,44 @@ static inline void register_tdcs_driver_interface(py::module& m)
       .def("makeDomainFunction", &Interface::makeDomainFunction, "create a domain function")
       .def("volumeConductorVTKWriter", &Interface::volumeConductorVTKWriter, "return a VTK writer for this volume conductor")
       .def("solveTDCSForward", &Interface::solveTDCSForward);
+}
+
+class PyInverseSolver {
+public:
+  using InverseSolver = duneuro::InverseSolver<3, double>;
+
+  explicit PyInverseSolver(py::dict d)
+  {
+    inverseSolver_ = std::make_unique<InverseSolver>(duneuro::toParameterTree(d));
+  }
+  
+  std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd> svd(const Eigen::MatrixXd& matrix)
+  {
+    return inverseSolver_->getSVD(matrix);
+  }
+  
+  void bindLeadField(const Eigen::MatrixXd& leadfield, int dofsPerSource)
+  {
+    inverseSolver_->bindLeadField(leadfield, dofsPerSource);
+  }
+  
+  std::tuple<std::vector<double>, std::vector<Eigen::Vector3d>> dipoleScan(const Eigen::VectorXd& topography, py::dict dipoleScanConfig)
+  {
+    return inverseSolver_->dipoleScan(topography, duneuro::toParameterTree(dipoleScanConfig));
+  }
+  
+private:
+  std::unique_ptr<InverseSolver> inverseSolver_;
+};
+
+static inline void register_inverse_solver(py::module& m)
+{
+  using Solver = PyInverseSolver;
+  py::class_<Solver>(m, "InverseSolver")
+    .def(py::init<py::dict>())
+    .def("svd", &Solver::svd, "print some random text")
+    .def("bindLeadField", &Solver::bindLeadField, "bind lead field to inverse solver")
+    .def("dipoleScan", &Solver::dipoleScan, "perform a dipole scan");
 }
 
 PYBIND11_MODULE(duneuropy, m)
@@ -966,4 +1025,6 @@ PYBIND11_MODULE(duneuropy, m)
   register_unfitted_statistics<3>(m);
 #endif
   duneuro::register_dipole_statistics<3>(m);
+  
+  register_inverse_solver(m);
 }
