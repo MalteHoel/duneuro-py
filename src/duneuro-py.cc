@@ -641,8 +641,17 @@ public:
   
   py::dict placeSourcesZ(const double resolution, const double zHeight, const size_t compartmentLabel)
   {
-    std::pair<std::vector<typename Interface::CoordinateType>, std::vector<std::array<size_t, 3>>> placedSources = driver_->placeSourcesZ(resolution, zHeight, compartmentLabel);
-    return py::dict("source_positions"_a = std::get<0>(placedSources), "grid_indices"_a = std::get<1>(placedSources));
+    std::tuple<std::vector<typename Interface::CoordinateType>, 
+               std::vector<std::array<size_t, 2>>,
+               typename Interface::CoordinateType,
+               typename Interface::CoordinateType,
+               std::array<double, 2>> 
+      placedSources = driver_->placeSourcesZ(resolution, zHeight, compartmentLabel);
+    return py::dict("source_positions"_a = std::get<0>(placedSources), 
+                    "grid_indices"_a = std::get<1>(placedSources),
+                    "lower_left_corner"_a = std::get<2>(placedSources),
+                    "upper_right_corner"_a = std::get<3>(placedSources),
+                    "grid_delta"_a = std::get<4>(placedSources));
   }
 
 private:
