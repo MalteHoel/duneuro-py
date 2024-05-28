@@ -1004,6 +1004,11 @@ public:
     return inverseSolver_->vectorSLORETA(topography, duneuro::toParameterTree(sLORETAConfig));
   }
   
+  std::vector<double> expectedEVDistribution(const Eigen::VectorXd& trueLeadFieldVector)
+  {
+    return inverseSolver_->expectedEVDistribution(trueLeadFieldVector);
+  }
+  
   std::vector<Eigen::Vector3d> vectorMNE(const Eigen::VectorXd& topography, py::dict mneConfig)
   {
     return inverseSolver_->vectorMNE(topography, duneuro::toParameterTree(mneConfig));
@@ -1030,6 +1035,7 @@ static inline void register_inverse_solver(py::module& m)
     .def("dipoleScan3d", &Solver::dipoleScan3d, "perform a dipole scan")
     .def("scalarBeamforming3d", &Solver::scalarBeamforming3d, "perform scalar beamformer scan")
     .def("vectorSLORETA", &Solver::vectorSLORETA, "perform sLORETA scan")
+    .def("expectedEVDistribution", &Solver::expectedEVDistribution, "compute the expected explained variance distribution of a given leadfield")
     .def("vectorMNE", &Solver::vectorMNE, "perform MNE reconstruction")
     .def("scanAverageExplainedVariance", &Solver::scanAverageExplainedVariance, "compute for each source position the average explained variance in some Hilbert norm");
 }
