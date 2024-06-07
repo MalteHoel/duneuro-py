@@ -537,6 +537,37 @@ public:
                     "upper_right_corner"_a = std::get<3>(placedSources),
                     "grid_delta"_a = std::get<4>(placedSources));
   }
+  
+  py::dict placePositionsZ(const double resolution, const double zHeight)
+  {
+    std::tuple<std::vector<typename Interface::CoordinateType>, 
+               std::vector<std::array<size_t, 2>>,
+               typename Interface::CoordinateType,
+               typename Interface::CoordinateType,
+               std::array<double, 2>> 
+      placedPositions = driver_->placePositionsZ(resolution, zHeight);
+    return py::dict("positions"_a = std::get<0>(placedPositions), 
+                    "grid_indices"_a = std::get<1>(placedPositions),
+                    "lower_left_corner"_a = std::get<2>(placedPositions),
+                    "upper_right_corner"_a = std::get<3>(placedPositions),
+                    "grid_delta"_a = std::get<4>(placedPositions));
+  }
+  
+  std::vector<double> 
+    evaluateFunctionAtPositionsInsideMesh(
+      const duneuro::Function& function,
+      const std::vector<typename Interface::CoordinateType>& positions)
+  {
+    return driver_->evaluateFunctionAtPositionsInsideMesh(function, positions);
+  }
+  
+  std::vector<double> 
+    evaluateUInfinityAtPositions(
+      const typename Interface::DipoleType& dipole,
+      const std::vector<typename Interface::CoordinateType>& positions)
+  {
+    return driver_->evaluateUInfinityAtPositions(dipole, positions);
+  }
 
 private:
   std::unique_ptr<Interface> driver_;
@@ -722,6 +753,9 @@ solve the eeg forward problem and store the result in the given function
       .def("statistics", &Interface::statistics, "compute driver statistics")
       .def("constructRegularSourceSpace", &Interface::constructRegularSourceSpace, "construct regular volumetric source space for a given volume conductor and source compartments")
       .def("placeSourcesZ", &Interface::placeSourcesZ, "place sources in the xy-plane at some user specified height")
+      .def("placePositionsZ", &Interface::placePositionsZ, "place positions in the xy-plane at some user specified height")
+      .def("evaluateFunctionAtPositionsInsideMesh", &Interface::evaluateFunctionAtPositionsInsideMesh, "evaluate the given function at some predefined positions inside the volume conductor")
+      .def("evaluateUInfinityAtPositions", &Interface::evaluateUInfinityAtPositions, "evaluate the infinity potential of some dipole at predefined positions")
       .def("print_citations", &Interface::print_citations, "list relevant publications");
 }
 
