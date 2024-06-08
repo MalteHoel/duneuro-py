@@ -568,6 +568,23 @@ public:
   {
     return driver_->evaluateUInfinityAtPositions(dipole, positions);
   }
+  
+  std::vector<double> 
+    evaluateChiAtPositions(
+      const typename Interface::DipoleType& dipole,
+      const std::vector<typename Interface::CoordinateType>& positions,
+      py::dict configSourceModel,
+      py::dict configSolver)
+  {
+    return driver_->evaluateChiAtPositions(dipole, positions, duneuro::toParameterTree(configSourceModel), duneuro::toParameterTree(configSolver));
+  }
+  
+  std::vector<double> 
+    evaluateSigmaAtPositions(
+      const std::vector<typename Interface::CoordinateType>& positions)
+  {
+    return driver_->evaluateSigmaAtPositions(positions);
+  }
 
 private:
   std::unique_ptr<Interface> driver_;
@@ -756,6 +773,8 @@ solve the eeg forward problem and store the result in the given function
       .def("placePositionsZ", &Interface::placePositionsZ, "place positions in the xy-plane at some user specified height")
       .def("evaluateFunctionAtPositionsInsideMesh", &Interface::evaluateFunctionAtPositionsInsideMesh, "evaluate the given function at some predefined positions inside the volume conductor")
       .def("evaluateUInfinityAtPositions", &Interface::evaluateUInfinityAtPositions, "evaluate the infinity potential of some dipole at predefined positions")
+      .def("evaluateChiAtPositions", &Interface::evaluateChiAtPositions, "evaluate the cutoff function chi of some dipole at predefined positions")
+      .def("evaluateSigmaAtPositions", &Interface::evaluateSigmaAtPositions, "evaluate the conductivity of the volume conductor at predefined positions")
       .def("print_citations", &Interface::print_citations, "list relevant publications");
 }
 
