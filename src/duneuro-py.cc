@@ -34,6 +34,8 @@
 
 namespace py = pybind11;
 
+using namespace pybind11::literals;
+
 static inline void register_exceptions()
 {
   py::register_exception_translator([](std::exception_ptr p) {
