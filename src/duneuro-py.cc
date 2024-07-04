@@ -24,9 +24,6 @@
 #include <duneuro/driver/driver_interface.hh>
 #include <duneuro/py/dipole_statistics.hh>
 #include <duneuro/py/parameter_tree.h>
-#include <duneuro/tes/patch_set.hh>
-#include <duneuro/tes/tdcs_driver_factory.hh>
-#include <duneuro/tes/tdcs_driver_interface.hh>
 #if HAVE_DUNE_UDG
 #include <duneuro/udg/hexahedralization.hh>
 #include <duneuro/udg/unfitted_statistics.hh>
@@ -506,6 +503,49 @@ public:
   {
     return driver_->computeMEGPrimaryField(dipoles, duneuro::toParameterTree(config));
   }
+  
+    std::vector<std::vector<double>>
+  createSourceSpace(py::dict config)
+  {
+    auto result = driver_->createSourceSpace(duneuro::toParameterTree(config));
+    return result;
+  }
+
+
+
+  virtual std::unique_ptr<duneuro::DenseMatrix<double>>
+  computeTDCSEvaluationMatrix(py::dict config)  
+  {
+    auto storage = std::make_shared<ParameterTreeStorage>();
+    std::unique_ptr<duneuro::DenseMatrix<double>> output = driver_->computeTDCSEvaluationMatrix(duneuro::toParameterTree(config), duneuro::DataTree(storage));
+    return output;
+  }
+  
+  virtual std::unique_ptr<duneuro::DenseMatrix<double>> applyTDCSEvaluationMatrix(py::buffer buffer,
+                                           const std::vector<typename Interface::CoordinateType>& positions,
+                                           py::dict config) const  
+  {
+    auto EvaluationMatrix = toDenseMatrix(buffer);
+    auto storage = std::make_shared<ParameterTreeStorage>();
+    std::unique_ptr<duneuro::DenseMatrix<double>> output = driver_->applyTDCSEvaluationMatrix(*EvaluationMatrix, positions,  duneuro::toParameterTree(config));
+    return output;
+  }
+ 
+
+  virtual std::unique_ptr<duneuro::DenseMatrix<double>> applyTDCSEvaluationMatrixAtCenters(py::buffer buffer,
+                                           py::dict config) const  
+  {
+    auto EvaluationMatrix = toDenseMatrix(buffer);
+    auto storage = std::make_shared<ParameterTreeStorage>();
+    std::unique_ptr<duneuro::DenseMatrix<double>> output = driver_->applyTDCSEvaluationMatrixAtCenters(*EvaluationMatrix,  duneuro::toParameterTree(config));
+    return output;
+  }
+
+  std::unique_ptr<duneuro::DenseMatrix<double>> elementStatistics()
+  {
+  std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->elementStatistics();
+  return result;
+  }
 
   py::dict statistics()
   {
@@ -768,6 +808,12 @@ solve the eeg forward problem and store the result in the given function
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
       .def("applyMEGTransfer", &Interface::applyMEGTransfer, "apply the meg transfer matrix",
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
+       .def("createSourceSpace", &Interface::createSourceSpace, "create a volumetric source grid", py::arg("config"))
+      .def("computeTDCSEvaluationMatrix", &Interface::computeTDCSEvaluationMatrix, "compute the tDCS Evaluation Matrix")
+      .def("applyTDCSEvaluationMatrix", &Interface::applyTDCSEvaluationMatrix, "apply the tDCS Evaluation Matrix")
+      .def("applyTDCSEvaluationMatrixAtCenters", &Interface::applyTDCSEvaluationMatrixAtCenters, "apply the tDCS Evaluation Matrix")
+      .def("elementStatistics", &Interface::elementStatistics,
+           "return the element centers")
       .def("computeMEGPrimaryField", &Interface::computeMEGPrimaryField, "compute the primary B field for the given dipoles", py::arg("dipoles"), py::arg("config"))
       .def("statistics", &Interface::statistics, "compute driver statistics")
       .def("constructRegularSourceSpace", &Interface::constructRegularSourceSpace, "construct regular volumetric source space for a given volume conductor and source compartments")
@@ -830,70 +876,6 @@ static inline void register_point_vtk_writer(py::module& m)
            "write the data to vtk");
 }
 
-template <class T, int dim>
-static inline void register_patch_set(py::module& m)
-{
-  using PS = duneuro::PatchSet<T, dim>;
-  std::stringstream name;
-  name << "PatchSet" << dim << "d";
-  py::class_<PS>(m, name.str().c_str()).def(py::init([](py::dict d) {
-    return PS(duneuro::toParameterTree(d));
-  }));
-}
-
-template <int dim>
-class PyTDCSDriverInterface
-{
-public:
-  using Interface = duneuro::TDCSDriverInterface<dim>;
-  explicit PyTDCSDriverInterface(const duneuro::PatchSet<double, dim>& patchSet, py::dict d)
-  {
-    duneuro::TDCSDriverData<dim> data;
-#if HAVE_DUNE_UDG
-    data.udgData = extractUnfittedDataFromMainDict<dim>(d);
-#endif
-    duneuro::extractFittedDataFromMainDict(d, data.fittedData);
-    driver_ = duneuro::TDCSDriverFactory<dim>::make_tdcs_driver(patchSet,
-                                                                duneuro::toParameterTree(d), data);
-  }
-
-  std::unique_ptr<duneuro::Function> makeDomainFunction() const
-  {
-    return driver_->makeDomainFunction();
-  }
-
-  VolumeVTKWriter volumeConductorVTKWriter(py::dict config)
-  {
-    return VolumeVTKWriter(driver_->volumeConductorVTKWriter(duneuro::toParameterTree(config)));
-  }
-
-  py::dict solveTDCSForward(duneuro::Function& solution, py::dict config) const
-  {
-    int verbose = config.contains("solver") && config["solver"].contains("verbose") ? py::int_(config["solver"]["verbose"]).cast<int>() : 0;
-    auto storage = std::make_shared<ParameterTreeStorage>(verbose);
-    driver_->solveTDCSForward(solution, duneuro::toParameterTree(config),
-                              duneuro::DataTree(storage));
-    return duneuro::toPyDict(storage->tree);
-  }
-
-private:
-  std::unique_ptr<Interface> driver_;
-  Dune::ParameterTree tree_;
-};
-
-template <int dim>
-static inline void register_tdcs_driver_interface(py::module& m)
-{
-  using Interface = PyTDCSDriverInterface<dim>;
-  std::stringstream classname;
-  classname << "TDCSDriver" << dim << "d";
-  py::class_<Interface>(m, classname.str().c_str())
-      .def(py::init<duneuro::PatchSet<double, dim>, py::dict>())
-      .def("makeDomainFunction", &Interface::makeDomainFunction, "create a domain function")
-      .def("volumeConductorVTKWriter", &Interface::volumeConductorVTKWriter, "return a VTK writer for this volume conductor")
-      .def("solveTDCSForward", &Interface::solveTDCSForward);
-}
-
 PYBIND11_MODULE(duneuropy, m)
 {
 	m.doc() = "duneuropy library";
@@ -914,8 +896,6 @@ PYBIND11_MODULE(duneuropy, m)
   register_meeg_driver_interface<2>(m);
   register_points_on_sphere<2>(m);
   register_point_vtk_writer<double, 2>(m);
-  register_patch_set<double, 2>(m);
-  register_tdcs_driver_interface<2>(m);
 #if HAVE_DUNE_UDG
   register_hexahedralize<2>(m);
   register_unfitted_statistics<2>(m);
@@ -930,8 +910,6 @@ PYBIND11_MODULE(duneuropy, m)
   register_meeg_driver_interface<3>(m);
   register_points_on_sphere<3>(m);
   register_point_vtk_writer<double, 3>(m);
-  register_patch_set<double, 3>(m);
-  register_tdcs_driver_interface<3>(m);
 #if HAVE_DUNE_UDG
   register_hexahedralize<3>(m);
   register_unfitted_statistics<3>(m);
