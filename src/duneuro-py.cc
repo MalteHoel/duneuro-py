@@ -551,12 +551,12 @@ public:
     // assign a unique label to each element in the fitted case
     if(elementLabelsOpt.has_value()) {
       return py::dict("elementCenters"_a = std::get<0>(elementStats),
-                      "elementVolumes"_a = std::get<0>(elementStats),
+                      "elementVolumes"_a = std::get<1>(elementStats),
                       "elementLabels"_a = elementLabelsOpt.value());
     }
     else {
       return py::dict("elementCenters"_a = std::get<0>(elementStats),
-                      "elementVolumes"_a = std::get<0>(elementStats));
+                      "elementVolumes"_a = std::get<1>(elementStats));
     }
   }
 
