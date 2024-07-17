@@ -504,47 +504,60 @@ public:
     return driver_->computeMEGPrimaryField(dipoles, duneuro::toParameterTree(config));
   }
   
-    std::vector<std::vector<double>>
+  std::vector<typename Interface::CoordinateType>
   createSourceSpace(py::dict config)
   {
-    auto result = driver_->createSourceSpace(duneuro::toParameterTree(config));
-    return result;
+    return driver_->createSourceSpace(duneuro::toParameterTree(config));
   }
 
-
-
-  virtual std::unique_ptr<duneuro::DenseMatrix<double>>
-  computeTDCSEvaluationMatrix(py::dict config)  
+  std::pair<duneuro::DenseMatrix<double>*, py::dict>
+  solveTDCSForward(py::dict config)  
   {
     auto storage = std::make_shared<ParameterTreeStorage>();
-    std::unique_ptr<duneuro::DenseMatrix<double>> output = driver_->computeTDCSEvaluationMatrix(duneuro::toParameterTree(config), duneuro::DataTree(storage));
-    return output;
+    std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->solveTDCSForward(duneuro::toParameterTree(config), duneuro::DataTree(storage));
+    return {result.release(), duneuro::toPyDict(storage->tree)};
   }
   
-  virtual std::unique_ptr<duneuro::DenseMatrix<double>> applyTDCSEvaluationMatrix(py::buffer buffer,
-                                           const std::vector<typename Interface::CoordinateType>& positions,
-                                           py::dict config) const  
+  std::pair<duneuro::DenseMatrix<double>*, py::dict>
+  evaluateMultipleFunctionsAtPositions(py::buffer buffer,
+                                       const std::vector<typename Interface::CoordinateType>& positions,
+                                       py::dict config) const  
   {
-    auto EvaluationMatrix = toDenseMatrix(buffer);
+    auto evaluationMatrix = toDenseMatrix(buffer);
     auto storage = std::make_shared<ParameterTreeStorage>();
-    std::unique_ptr<duneuro::DenseMatrix<double>> output = driver_->applyTDCSEvaluationMatrix(*EvaluationMatrix, positions,  duneuro::toParameterTree(config));
-    return output;
+    std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->evaluateMultipleFunctionsAtPositions(*evaluationMatrix, positions,  duneuro::toParameterTree(config));
+    return {result.release(), duneuro::toPyDict(storage->tree)};
   }
  
 
-  virtual std::unique_ptr<duneuro::DenseMatrix<double>> applyTDCSEvaluationMatrixAtCenters(py::buffer buffer,
-                                           py::dict config) const  
+  std::pair<duneuro::DenseMatrix<double>*, py::dict>
+  evaluateMultipleFunctionsAtElementCenters(py::buffer buffer,
+                                            py::dict config) const  
   {
-    auto EvaluationMatrix = toDenseMatrix(buffer);
+    auto evaluationMatrix = toDenseMatrix(buffer);
     auto storage = std::make_shared<ParameterTreeStorage>();
-    std::unique_ptr<duneuro::DenseMatrix<double>> output = driver_->applyTDCSEvaluationMatrixAtCenters(*EvaluationMatrix,  duneuro::toParameterTree(config));
-    return output;
+    std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->evaluateMultipleFunctionsAtElementCenters(*evaluationMatrix,  duneuro::toParameterTree(config));
+    return {result.release(), duneuro::toPyDict(storage->tree)};
   }
 
-  std::unique_ptr<duneuro::DenseMatrix<double>> elementStatistics()
+  py::dict elementStatistics() const
   {
-  std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->elementStatistics();
-  return result;
+    std::tuple<std::vector<typename Interface::CoordinateType>,
+               std::vector<double>,
+               std::optional<std::vector<std::size_t>>> elementStats = driver_->elementStatistics();
+    std::optional<std::vector<std::size_t>> elementLabelsOpt = std::get<2>(elementStats);
+    
+    // since for unfitted methods elements can contain more than one compartment, we can in general only
+    // assign a unique label to each element in the fitted case
+    if(elementLabelsOpt.has_value()) {
+      return py::dict("elementCenters"_a = std::get<0>(elementStats),
+                      "elementVolumes"_a = std::get<0>(elementStats),
+                      "elementLabels"_a = elementLabelsOpt.value());
+    }
+    else {
+      return py::dict("elementCenters"_a = std::get<0>(elementStats),
+                      "elementVolumes"_a = std::get<0>(elementStats));
+    }
   }
 
   py::dict statistics()
@@ -557,75 +570,6 @@ public:
   void print_citations()
   {
      driver_->print_citations();
-  }
-  
-  py::dict constructRegularSourceSpace(const double gridSize, const std::vector<size_t> sourceCompartments, py::dict config)
-  {
-    std::pair<std::vector<typename Interface::CoordinateType>, std::vector<size_t>> sourceSpace = driver_->constructRegularSourceSpace(gridSize, sourceCompartments, duneuro::toParameterTree(config));
-    return py::dict("source_positions"_a = std::get<0>(sourceSpace), "element_indices"_a = std::get<1>(sourceSpace));
-  }
-  
-  py::dict placeSourcesZ(const double resolution, const double zHeight, const size_t compartmentLabel)
-  {
-    std::tuple<std::vector<typename Interface::CoordinateType>, 
-               std::vector<std::array<size_t, 2>>,
-               typename Interface::CoordinateType,
-               typename Interface::CoordinateType,
-               std::array<double, 2>> 
-      placedSources = driver_->placeSourcesZ(resolution, zHeight, compartmentLabel);
-    return py::dict("source_positions"_a = std::get<0>(placedSources), 
-                    "grid_indices"_a = std::get<1>(placedSources),
-                    "lower_left_corner"_a = std::get<2>(placedSources),
-                    "upper_right_corner"_a = std::get<3>(placedSources),
-                    "grid_delta"_a = std::get<4>(placedSources));
-  }
-  
-  py::dict placePositionsZ(const double resolution, const double zHeight)
-  {
-    std::tuple<std::vector<typename Interface::CoordinateType>, 
-               std::vector<std::array<size_t, 2>>,
-               typename Interface::CoordinateType,
-               typename Interface::CoordinateType,
-               std::array<double, 2>> 
-      placedPositions = driver_->placePositionsZ(resolution, zHeight);
-    return py::dict("positions"_a = std::get<0>(placedPositions), 
-                    "grid_indices"_a = std::get<1>(placedPositions),
-                    "lower_left_corner"_a = std::get<2>(placedPositions),
-                    "upper_right_corner"_a = std::get<3>(placedPositions),
-                    "grid_delta"_a = std::get<4>(placedPositions));
-  }
-  
-  std::vector<double> 
-    evaluateFunctionAtPositionsInsideMesh(
-      const duneuro::Function& function,
-      const std::vector<typename Interface::CoordinateType>& positions)
-  {
-    return driver_->evaluateFunctionAtPositionsInsideMesh(function, positions);
-  }
-  
-  std::vector<double> 
-    evaluateUInfinityAtPositions(
-      const typename Interface::DipoleType& dipole,
-      const std::vector<typename Interface::CoordinateType>& positions)
-  {
-    return driver_->evaluateUInfinityAtPositions(dipole, positions);
-  }
-  
-  std::vector<double> 
-    evaluateChiAtPositions(
-      const typename Interface::DipoleType& dipole,
-      const std::vector<typename Interface::CoordinateType>& positions,
-      py::dict configSourceModel,
-      py::dict configSolver)
-  {
-    return driver_->evaluateChiAtPositions(dipole, positions, duneuro::toParameterTree(configSourceModel), duneuro::toParameterTree(configSolver));
-  }
-  
-  std::vector<double> 
-    evaluateSigmaAtPositions(
-      const std::vector<typename Interface::CoordinateType>& positions)
-  {
-    return driver_->evaluateSigmaAtPositions(positions);
   }
 
 private:
@@ -808,21 +752,13 @@ solve the eeg forward problem and store the result in the given function
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
       .def("applyMEGTransfer", &Interface::applyMEGTransfer, "apply the meg transfer matrix",
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
-       .def("createSourceSpace", &Interface::createSourceSpace, "create a volumetric source grid", py::arg("config"))
-      .def("computeTDCSEvaluationMatrix", &Interface::computeTDCSEvaluationMatrix, "compute the tDCS Evaluation Matrix")
-      .def("applyTDCSEvaluationMatrix", &Interface::applyTDCSEvaluationMatrix, "apply the tDCS Evaluation Matrix")
-      .def("applyTDCSEvaluationMatrixAtCenters", &Interface::applyTDCSEvaluationMatrixAtCenters, "apply the tDCS Evaluation Matrix")
-      .def("elementStatistics", &Interface::elementStatistics,
-           "return the element centers")
+      .def("createSourceSpace", &Interface::createSourceSpace, "create a volumetric source grid", py::arg("config"))
+      .def("solveTDCSForward", &Interface::solveTDCSForward, "solve the TDCS forward problem")
+      .def("evaluateMultipleFunctionsAtPositions", &Interface::evaluateMultipleFunctionsAtPositions, "evaluate multiple functions, given as the rows of a matrix, at predefined positions")
+      .def("evaluateMultipleFunctionsAtElementCenters", &Interface::evaluateMultipleFunctionsAtElementCenters, "evaluate multiple functions, given as the rows of a matrix, at element centers")
+      .def("elementStatistics", &Interface::elementStatistics, "return the element centers")
       .def("computeMEGPrimaryField", &Interface::computeMEGPrimaryField, "compute the primary B field for the given dipoles", py::arg("dipoles"), py::arg("config"))
       .def("statistics", &Interface::statistics, "compute driver statistics")
-      .def("constructRegularSourceSpace", &Interface::constructRegularSourceSpace, "construct regular volumetric source space for a given volume conductor and source compartments")
-      .def("placeSourcesZ", &Interface::placeSourcesZ, "place sources in the xy-plane at some user specified height")
-      .def("placePositionsZ", &Interface::placePositionsZ, "place positions in the xy-plane at some user specified height")
-      .def("evaluateFunctionAtPositionsInsideMesh", &Interface::evaluateFunctionAtPositionsInsideMesh, "evaluate the given function at some predefined positions inside the volume conductor")
-      .def("evaluateUInfinityAtPositions", &Interface::evaluateUInfinityAtPositions, "evaluate the infinity potential of some dipole at predefined positions")
-      .def("evaluateChiAtPositions", &Interface::evaluateChiAtPositions, "evaluate the cutoff function chi of some dipole at predefined positions")
-      .def("evaluateSigmaAtPositions", &Interface::evaluateSigmaAtPositions, "evaluate the conductivity of the volume conductor at predefined positions")
       .def("print_citations", &Interface::print_citations, "list relevant publications");
 }
 
