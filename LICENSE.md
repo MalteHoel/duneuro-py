@@ -40,10 +40,6 @@ following licenses:
   can find a copy of the GNU General Public License, Version 2, in the file
   [GPL-2][3] or at http://www.gnu.org/licenses/gpl-2.0.
 
-This repository uses [pybind11][https://github.com/pybind/pybind11] as a submodule
-to generate python bindings. Pybind11 is licensed under a BSD 3-clause license.
-You can find a copy of the license in the file [LICENSE_PYBIND11][4].
-
 
 Links
 -----
@@ -51,4 +47,3 @@ Links
 [1]: GPL-3
 [2]: LGPL-3
 [3]: GPL-2
-[4]: LICENSE_PYBIND11
