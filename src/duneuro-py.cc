@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: Copyright © duneuro-py contributors, see file LICENSE.md in module root
+// SPDX-License-Identifier: LicenseRef-GPL-2.0-only-with-duneuro-py-exception OR LGPL-3.0-or-later OR GPL-3.0-or-later
 #if HAVE_CONFIG_H
 #include <config.h>
 #endif
