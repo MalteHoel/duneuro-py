@@ -19,16 +19,17 @@ following licenses:
 * The GNU Lesser General Public License as published by the Free Software
   Foundation, either Version 3 of the license or (at your option) any later
   version. You can find a copy of the GNU Lesser General Public License, Version
-  3, in the files [GPL-3][1] and [LGPL-3][2] or at http://www.gnu.org/licenses/lgpl-3.0.
+  3, in the files [GPL-3.0-or-later.txt][1] and [LGPL-3.0-or-later.txt][2] or 
+  at http://www.gnu.org/licenses/lgpl-3.0.
 
 * Version 2 of the GNU General Public License as published by the Free Software
   Foundation, with the following special exception for linking and compiling
-  against the duneuro library, the so-called "runtime exception":
+  against the duneuro-py library, the so-called "runtime exception":
 
->   As a special exception, you may use the duneuro source files as part of a
+>   As a special exception, you may use the duneuro-py source files as part of a
 >   software library or application without restriction.  Specifically, if other
 >   files instantiate templates or use macros or inline functions from one or
->   more of the duneuro source files, or you compile one or more of the duneuro
+>   more of the duneuro-py source files, or you compile one or more of the duneuro-py
 >   source files and link them with other files to produce an executable, this
 >   does not by itself cause the resulting executable to be covered by the GNU
 >   General Public License.  This exception does not however invalidate any
@@ -37,18 +38,12 @@ following licenses:
 
   This license is intended to be similar to the GNU Lesser General Public
   License, Version 2, which by itself isn't suitable for a template library. You
-  can find a copy of the GNU General Public License, Version 2, in the file
-  [GPL-2][3] or at http://www.gnu.org/licenses/gpl-2.0.
-
-This repository uses [pybind11][https://github.com/pybind/pybind11] as a submodule
-to generate python bindings. Pybind11 is licensed under a BSD 3-clause license.
-You can find a copy of the license in the file [LICENSE_PYBIND11][4].
+  can find a copy of the GNU General Public License, Version 2, at 
+  http://www.gnu.org/licenses/gpl-2.0.
 
 
 Links
 -----
 
-[1]: GPL-3
-[2]: LGPL-3
-[3]: GPL-2
-[4]: LICENSE_PYBIND11
+[1]: LICENSES/GPL-3.0-or-later.txt
+[2]: LICENSES/LGPL-3.0-or-later.txt

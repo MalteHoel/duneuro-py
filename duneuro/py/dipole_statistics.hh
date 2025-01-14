@@ -1,7 +1,9 @@
+// SPDX-FileCopyrightText: Copyright © duneuro-py contributors, see file LICENSE.md in module root
+// SPDX-License-Identifier: LicenseRef-GPL-2.0-only-with-duneuro-py-exception OR LGPL-3.0-or-later
 #ifndef DUNEURO_PY_DIPOLE_STATISTICS_HH
 #define DUNEURO_PY_DIPOLE_STATISTICS_HH
 
-#include <pybind11/pybind11.h>
+#include <dune/python/pybind11/pybind11.h>
 
 #include <duneuro/common/dipole_statistics.hh>
 #include <duneuro/common/dipole_statistics_factory.hh>

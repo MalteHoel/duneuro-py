@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: Copyright © duneuro-py contributors, see file LICENSE.md in module root
+// SPDX-License-Identifier: LicenseRef-GPL-2.0-only-with-duneuro-py-exception OR LGPL-3.0-or-later OR GPL-3.0-or-later
 #if HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -6,10 +8,10 @@
 
 #include <memory>
 
-#include <pybind11/numpy.h>
-#include <pybind11/operators.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <dune/python/pybind11/numpy.h>
+#include <dune/python/pybind11/operators.h>
+#include <dune/python/pybind11/pybind11.h>
+#include <dune/python/pybind11/stl.h>
 
 #include <dune/common/parametertree.hh>
 #include <dune/common/parametertreeparser.hh>
@@ -24,15 +26,14 @@
 #include <duneuro/driver/driver_interface.hh>
 #include <duneuro/py/dipole_statistics.hh>
 #include <duneuro/py/parameter_tree.h>
-#include <duneuro/tes/patch_set.hh>
-#include <duneuro/tes/tdcs_driver_factory.hh>
-#include <duneuro/tes/tdcs_driver_interface.hh>
 #if HAVE_DUNE_UDG
 #include <duneuro/udg/hexahedralization.hh>
 #include <duneuro/udg/unfitted_statistics.hh>
 #endif
 
 namespace py = pybind11;
+
+using namespace pybind11::literals;
 
 static inline void register_exceptions()
 {
@@ -47,9 +48,18 @@ static inline void register_exceptions()
 }
 
 struct ParameterTreeStorage : public duneuro::StorageInterface {
+public:
+  explicit ParameterTreeStorage(int verbose = 0)
+   : verbose_(verbose)
+  {
+  }
+
   virtual void store(const std::string& name, const std::string& value)
   {
     std::lock_guard<std::mutex> lock(mutex);
+    if (verbose_ >= 1) {
+      std::cout << name << " = " << value << "\n";
+    }
     tree[name] = value;
   }
 
@@ -65,6 +75,7 @@ struct ParameterTreeStorage : public duneuro::StorageInterface {
 
   Dune::ParameterTree tree;
   std::mutex mutex;
+  int verbose_;
 };
 
 std::unique_ptr<duneuro::DenseMatrix<double>> toDenseMatrix(py::buffer buffer)
@@ -134,7 +145,7 @@ void register_field_vector(py::module& m)
   std::stringstream docstr;
   docstr << "a " << dim << "-dimensional vector";
   py::class_<FieldVector>(m, (std::string("FieldVector") + std::to_string(dim) + "D").c_str(),
-                          docstr.str().c_str())
+                          docstr.str().c_str(), py::buffer_protocol())
       .def_buffer([](FieldVector& m) -> py::buffer_info {
         return py::buffer_info(
             &m[0], /* Pointer to buffer */
@@ -145,17 +156,23 @@ void register_field_vector(py::module& m)
             {sizeof(T)});
       })
       .def(py::init<T>())
-      .def("__init__",
-           [](FieldVector& instance, py::array_t<T> array) {
-             if (array.size() != dim)
-               DUNE_THROW(Dune::Exception, "array has to have size " << dim << " but got "
-                                                                     << array.size());
-             if (array.ndim() != 1)
-               DUNE_THROW(Dune::Exception, "array has to have dim " << 1 << " but got "
-                                                                    << array.ndim());
-             new (&instance) FieldVector();
-             std::copy(array.data(), array.data() + dim, instance.begin());
-           })
+      .def(py::init(
+        [] (py::array_t<T> array) {
+          if (array.size() != dim) {
+            DUNE_THROW(Dune::Exception, "array has to have size " << dim << " but got" << array.size());
+          }
+          if (array.ndim() != 1) {
+            DUNE_THROW(Dune::Exception, "array has to have dim " << 1 << " but got " << array.ndim());
+          }
+          FieldVector vector(0.0);
+          auto array_accessor = array.template unchecked<1>();
+          for(size_t i = 0; i < dim; ++i) {
+            vector[i] = array_accessor(i);
+          }
+          return vector;
+        }), // end definition of lambda
+        "create a vector from any python buffer, such as a numpy array"
+      ) // end definition of constructor
       .def(py::self += py::self)
       .def(py::self -= py::self)
       .def(py::self += T())
@@ -188,18 +205,42 @@ void register_dipole(py::module& m)
       "a class representing a mathematical dipole consisting of a position and moment")
       .def(py::init<FieldVector, FieldVector>(), "create a dipole from its position and moment",
            py::arg("position"), py::arg("moment"))
-      .def("__init__",
-           [](Dipole& instance, py::array_t<T> pos, py::array_t<T> mom) {
+      .def(py::init(
+           [](py::array_t<T> pos, py::array_t<T> mom) {
              if (pos.size() != dim || pos.ndim() != 1)
                DUNE_THROW(Dune::Exception, "position has to have " << dim << " entries");
              if (mom.size() != dim || pos.ndim() != 1)
                DUNE_THROW(Dune::Exception, "moment has to have " << dim << " entries");
              FieldVector vpos, vmom;
-             std::copy(pos.data(), pos.data() + dim, vpos.begin());
-             std::copy(mom.data(), mom.data() + dim, vmom.begin());
-             new (&instance) Dipole(vpos, vmom);
-           },
-           "create a dipole from its position and moment", py::arg("position"), py::arg("moment"))
+             auto pos_accessor = pos.template unchecked<1>();
+             auto mom_accessor = mom.template unchecked<1>();
+             for(size_t i = 0; i < dim; ++i) {
+              vpos[i] = pos_accessor(i);
+              vmom[i] = mom_accessor(i);
+             }
+             return Dipole(vpos, vmom);
+           }), // end definition of lambda
+           "create a dipole from its position and moment", py::arg("position"), py::arg("moment")
+      ) // end definition of constructor
+      .def(py::init(
+           [](py::array_t<T> pos_and_mom) {
+             if(pos_and_mom.size() != 2 * dim || pos_and_mom.ndim() != 1) {
+               DUNE_THROW(Dune::Exception, "combined buffer has to be 1-dimensional with" << 2 * dim << " entries");
+             }
+
+             FieldVector vpos, vmom;
+             auto vector_accessor = pos_and_mom.template unchecked<1>();
+             for(size_t i = 0; i < dim; ++i) {
+              vpos[i] = vector_accessor(i);
+             }
+             for(size_t i = 0; i < dim; ++i) {
+              vmom[i] = vector_accessor(dim + i);
+             }
+             return Dipole(vpos, vmom);
+           }), // end definition of lambda
+           "create a dipole from an array or list containing both its position and moment, where we assume the position is given first",
+           py::arg("combined position and moment")
+      ) // end definition of constructor
       .def("position", &Dipole::position, "return the dipole position",
            py::return_value_policy::reference_internal)
       .def("moment", &Dipole::moment, "return the dipole moment",
@@ -294,15 +335,61 @@ void register_unfitted_statistics(py::module& m)
   using US = duneuro::UnfittedStatistics<dim>;
   auto name = "UnfittedStatistics" + std::to_string(dim) + "d";
   py::class_<US>(m, name.c_str(), "statistics of an unfitted discretization")
-      .def("__init__",
-           [](US& instance, py::dict d) {
+      .def(py::init(
+           [](py::dict d) {
              auto ud = extractUnfittedDataFromMainDict<dim>(d);
-             new (&instance) US(ud, duneuro::toParameterTree(d));
-           })
+             return US(ud, duneuro::toParameterTree(d));
+           }))
       .def("interfaceValues", &US::interfaceValues, "evaluate the interfaces at a given position.");
 }
 
 #endif
+
+class VolumeVTKWriter {
+public:
+  explicit VolumeVTKWriter(std::unique_ptr<duneuro::VolumeConductorVTKWriterInterface> volumeWriterPtr)
+  : volumeWriterPtr_(std::move(volumeWriterPtr))
+  {
+  }
+  
+  void addVertexData(const duneuro::Function& function, const std::string& name)
+  {
+    volumeWriterPtr_->addVertexData(function, name);
+  }
+  
+  void addVertexDataGradient(const duneuro::Function& function, const std::string& name)
+  {
+    volumeWriterPtr_->addVertexDataGradient(function, name);
+  }
+  
+  void addCellData(const duneuro::Function& function, const std::string& name)
+  {
+    volumeWriterPtr_->addCellData(function, name);
+  }
+  
+  void addCellDataGradient(const duneuro::Function& function, const std::string& name)
+  {
+    volumeWriterPtr_->addCellDataGradient(function, name);
+  }
+  
+  void write(py::dict d) {
+    volumeWriterPtr_->write(duneuro::toParameterTree(d));
+  }
+  
+private:
+  std::unique_ptr<duneuro::VolumeConductorVTKWriterInterface> volumeWriterPtr_;
+};
+
+void register_volume_vtk_writer(py::module& m)
+{
+  std::string name = "VolumeVTKWriter";
+  py::class_<VolumeVTKWriter>(m, name.c_str(), "write a volume conductor and associated grid functions in the VTK format")
+    .def("addVertexData", &VolumeVTKWriter::addVertexData, "evaluate the given function on each grid vertex")
+    .def("addVertexData", &VolumeVTKWriter::addVertexDataGradient, "evaluate the gradient of the given function on each grid vertex")
+    .def("addCellData", &VolumeVTKWriter::addCellData, "evaluate the given function at the center of each cell")
+    .def("addCellDataGradient", &VolumeVTKWriter::addCellDataGradient, "evaluate the gradient of the given function at the center of each cell")
+    .def("write", &VolumeVTKWriter::write, "write output");
+}
 
 template <int dim>
 class PyMEEGDriverInterface
@@ -327,7 +414,8 @@ public:
   py::dict solveEEGForward(const typename Interface::DipoleType& dipole,
                            duneuro::Function& solution, py::dict config)
   {
-    auto storage = std::make_shared<ParameterTreeStorage>();
+    int verbose = config.contains("solver") && config["solver"].contains("verbose") ? py::int_(config["solver"]["verbose"]).cast<int>() : 0;
+    auto storage = std::make_shared<ParameterTreeStorage>(verbose);
     driver_->solveEEGForward(dipole, solution, duneuro::toParameterTree(config),
                              duneuro::DataTree(storage));
     return duneuro::toPyDict(storage->tree);
@@ -336,24 +424,16 @@ public:
   std::pair<std::vector<double>, py::dict> solveMEGForward(const duneuro::Function& eegSolution,
                                                            py::dict config)
   {
-    auto storage = std::make_shared<ParameterTreeStorage>();
+    int verbose = config.contains("solver") && config["solver"].contains("verbose") ? py::int_(config["solver"]["verbose"]).cast<int>() : 0;
+    auto storage = std::make_shared<ParameterTreeStorage>(verbose);
     auto result = driver_->solveMEGForward(eegSolution, duneuro::toParameterTree(config),
                                            duneuro::DataTree(storage));
     return {result, duneuro::toPyDict(storage->tree)};
   }
 
-  py::dict write(const duneuro::Function& solution, py::dict config) const
+  VolumeVTKWriter volumeConductorVTKWriter(py::dict config)
   {
-    auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->write(solution, duneuro::toParameterTree(config), duneuro::DataTree(storage));
-    return duneuro::toPyDict(storage->tree);
-  }
-
-  py::dict write(py::dict config) const
-  {
-    auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->write(duneuro::toParameterTree(config), duneuro::DataTree(storage));
-    return duneuro::toPyDict(storage->tree);
+    return VolumeVTKWriter(driver_->volumeConductorVTKWriter(duneuro::toParameterTree(config)));
   }
 
   void setElectrodes(const std::vector<typename Interface::CoordinateType>& electrodes,
@@ -381,7 +461,8 @@ public:
 
   std::pair<duneuro::DenseMatrix<double>*, py::dict> computeEEGTransferMatrix(py::dict config)
   {
-    auto storage = std::make_shared<ParameterTreeStorage>();
+    int verbose = config.contains("solver") && config["solver"].contains("verbose") ? py::int_(config["solver"]["verbose"]).cast<int>() : 0;
+    auto storage = std::make_shared<ParameterTreeStorage>(verbose);
     std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->computeEEGTransferMatrix(
         duneuro::toParameterTree(config), duneuro::DataTree(storage));
     return {result.release(), duneuro::toPyDict(storage->tree)};
@@ -389,7 +470,8 @@ public:
 
   std::pair<duneuro::DenseMatrix<double>*, py::dict> computeMEGTransferMatrix(py::dict config)
   {
-    auto storage = std::make_shared<ParameterTreeStorage>();
+    int verbose = config.contains("solver") && config["solver"].contains("verbose") ? py::int_(config["solver"]["verbose"]).cast<int>() : 0;
+    auto storage = std::make_shared<ParameterTreeStorage>(verbose);
     std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->computeMEGTransferMatrix(
         duneuro::toParameterTree(config), duneuro::DataTree(storage));
     return {result.release(), duneuro::toPyDict(storage->tree)};
@@ -399,8 +481,9 @@ public:
   applyEEGTransfer(py::buffer buffer, const std::vector<typename Interface::DipoleType>& dipoles,
                    py::dict config)
   {
+    int verbose = config.contains("solver") && config["solver"].contains("verbose") ? py::int_(config["solver"]["verbose"]).cast<int>() : 0;
     auto transferMatrix = toDenseMatrix(buffer);
-    auto storage = std::make_shared<ParameterTreeStorage>();
+    auto storage = std::make_shared<ParameterTreeStorage>(verbose);
     auto result = driver_->applyEEGTransfer(
         *transferMatrix, dipoles, duneuro::toParameterTree(config), duneuro::DataTree(storage));
     return {result, duneuro::toPyDict(storage->tree)};
@@ -410,11 +493,73 @@ public:
   applyMEGTransfer(py::buffer buffer, const std::vector<typename Interface::DipoleType>& dipoles,
                    py::dict config)
   {
+    int verbose = config.contains("solver") && config["solver"].contains("verbose") ? py::int_(config["solver"]["verbose"]).cast<int>() : 0;
     auto transferMatrix = toDenseMatrix(buffer);
-    auto storage = std::make_shared<ParameterTreeStorage>();
+    auto storage = std::make_shared<ParameterTreeStorage>(verbose);
     auto result = driver_->applyMEGTransfer(
         *transferMatrix, dipoles, duneuro::toParameterTree(config), duneuro::DataTree(storage));
     return {result, duneuro::toPyDict(storage->tree)};
+  }
+
+  std::vector<std::vector<double>> computeMEGPrimaryField(const std::vector<typename Interface::DipoleType>& dipoles, py::dict config)
+  {
+    return driver_->computeMEGPrimaryField(dipoles, duneuro::toParameterTree(config));
+  }
+  
+  std::vector<typename Interface::CoordinateType>
+  createSourceSpace(py::dict config)
+  {
+    return driver_->createSourceSpace(duneuro::toParameterTree(config));
+  }
+
+  std::pair<duneuro::DenseMatrix<double>*, py::dict>
+  solveTDCSForward(py::dict config)  
+  {
+    auto storage = std::make_shared<ParameterTreeStorage>();
+    std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->solveTDCSForward(duneuro::toParameterTree(config), duneuro::DataTree(storage));
+    return {result.release(), duneuro::toPyDict(storage->tree)};
+  }
+  
+  std::pair<duneuro::DenseMatrix<double>*, py::dict>
+  evaluateMultipleFunctionsAtPositions(py::buffer buffer,
+                                       const std::vector<typename Interface::CoordinateType>& positions,
+                                       py::dict config) const  
+  {
+    auto evaluationMatrix = toDenseMatrix(buffer);
+    auto storage = std::make_shared<ParameterTreeStorage>();
+    std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->evaluateMultipleFunctionsAtPositions(*evaluationMatrix, positions,  duneuro::toParameterTree(config));
+    return {result.release(), duneuro::toPyDict(storage->tree)};
+  }
+ 
+
+  std::pair<duneuro::DenseMatrix<double>*, py::dict>
+  evaluateMultipleFunctionsAtElementCenters(py::buffer buffer,
+                                            py::dict config) const  
+  {
+    auto evaluationMatrix = toDenseMatrix(buffer);
+    auto storage = std::make_shared<ParameterTreeStorage>();
+    std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->evaluateMultipleFunctionsAtElementCenters(*evaluationMatrix,  duneuro::toParameterTree(config));
+    return {result.release(), duneuro::toPyDict(storage->tree)};
+  }
+
+  py::dict elementStatistics() const
+  {
+    std::tuple<std::vector<typename Interface::CoordinateType>,
+               std::vector<double>,
+               std::optional<std::vector<std::size_t>>> elementStats = driver_->elementStatistics();
+    std::optional<std::vector<std::size_t>> elementLabelsOpt = std::get<2>(elementStats);
+    
+    // since for unfitted methods elements can contain more than one compartment, we can in general only
+    // assign a unique label to each element in the fitted case
+    if(elementLabelsOpt.has_value()) {
+      return py::dict("elementCenters"_a = std::get<0>(elementStats),
+                      "elementVolumes"_a = std::get<1>(elementStats),
+                      "elementLabels"_a = elementLabelsOpt.value());
+    }
+    else {
+      return py::dict("elementCenters"_a = std::get<0>(elementStats),
+                      "elementVolumes"_a = std::get<1>(elementStats));
+    }
   }
 
   py::dict statistics()
@@ -438,8 +583,6 @@ template <int dim>
 static inline void register_meeg_driver_interface(py::module& m)
 {
   using Interface = PyMEEGDriverInterface<dim>;
-  using write1 = py::dict (Interface::*)(const duneuro::Function&, py::dict) const;
-  using write2 = py::dict (Interface::*)(py::dict) const;
   std::stringstream classname;
   classname << "MEEGDriver" << dim << "d";
   py::class_<Interface>(m, classname.str().c_str())
@@ -589,8 +732,7 @@ solve the eeg forward problem and store the result in the given function
       .def("solveMEGForward", &Interface::solveMEGForward
            /* , */
            /* "solve the meg forward problem and return the solution" */)
-      .def("write", write1(&Interface::write))
-      .def("write", write2(&Interface::write))
+      .def("volumeConductorVTKWriter", &Interface::volumeConductorVTKWriter, "return a VTK writer for this volume conductor")
       .def("setElectrodes", &Interface::setElectrodes,
            "set the electrodes. subsequent calls to evaluateAtElectrodes will use these "
            "electrodes.",
@@ -612,6 +754,12 @@ solve the eeg forward problem and store the result in the given function
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
       .def("applyMEGTransfer", &Interface::applyMEGTransfer, "apply the meg transfer matrix",
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
+      .def("createSourceSpace", &Interface::createSourceSpace, "create a volumetric source grid", py::arg("config"))
+      .def("solveTDCSForward", &Interface::solveTDCSForward, "solve the TDCS forward problem")
+      .def("evaluateMultipleFunctionsAtPositions", &Interface::evaluateMultipleFunctionsAtPositions, "evaluate multiple functions, given as the rows of a matrix, at predefined positions")
+      .def("evaluateMultipleFunctionsAtElementCenters", &Interface::evaluateMultipleFunctionsAtElementCenters, "evaluate multiple functions, given as the rows of a matrix, at element centers")
+      .def("elementStatistics", &Interface::elementStatistics, "return the element centers")
+      .def("computeMEGPrimaryField", &Interface::computeMEGPrimaryField, "compute the primary B field for the given dipoles", py::arg("dipoles"), py::arg("config"))
       .def("statistics", &Interface::statistics, "compute driver statistics")
       .def("print_citations", &Interface::print_citations, "list relevant publications");
 }
@@ -620,7 +768,7 @@ template <class T>
 void register_dense_matrix(py::module& m)
 {
   using Matrix = duneuro::DenseMatrix<T>;
-  py::class_<Matrix>(m, "Matrix").def_buffer([](Matrix& m) -> py::buffer_info {
+  py::class_<Matrix>(m, "Matrix", py::buffer_protocol()).def_buffer([](Matrix& m) -> py::buffer_info {
     return py::buffer_info(
         m.data(), /* Pointer to buffer */
         sizeof(T), /* Size of one scalar */
@@ -666,87 +814,15 @@ static inline void register_point_vtk_writer(py::module& m)
            "write the data to vtk");
 }
 
-template <class T, int dim>
-static inline void register_patch_set(py::module& m)
+PYBIND11_MODULE(duneuropy, m)
 {
-  using PS = duneuro::PatchSet<T, dim>;
-  std::stringstream name;
-  name << "PatchSet" << dim << "d";
-  py::class_<PS>(m, name.str().c_str()).def("__init__", [](PS& instance, py::dict d) {
-    new (&instance) PS(duneuro::toParameterTree(d));
-  });
-}
-
-template <int dim>
-class PyTDCSDriverInterface
-{
-public:
-  using Interface = duneuro::TDCSDriverInterface<dim>;
-  explicit PyTDCSDriverInterface(const duneuro::PatchSet<double, dim>& patchSet, py::dict d)
-  {
-    duneuro::TDCSDriverData<dim> data;
-#if HAVE_DUNE_UDG
-    data.udgData = extractUnfittedDataFromMainDict<dim>(d);
-#endif
-    duneuro::extractFittedDataFromMainDict(d, data.fittedData);
-    driver_ = duneuro::TDCSDriverFactory<dim>::make_tdcs_driver(patchSet,
-                                                                duneuro::toParameterTree(d), data);
-  }
-
-  std::unique_ptr<duneuro::Function> makeDomainFunction() const
-  {
-    return driver_->makeDomainFunction();
-  }
-
-  py::dict write(py::dict config) const
-  {
-    auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->write(duneuro::toParameterTree(config), duneuro::DataTree(storage));
-    return duneuro::toPyDict(storage->tree);
-  }
-
-  py::dict write(const duneuro::Function& solution, py::dict config) const
-  {
-    auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->write(solution, duneuro::toParameterTree(config), duneuro::DataTree(storage));
-    return duneuro::toPyDict(storage->tree);
-  }
-
-  py::dict solveTDCSForward(duneuro::Function& solution, py::dict config) const
-  {
-    auto storage = std::make_shared<ParameterTreeStorage>();
-    driver_->solveTDCSForward(solution, duneuro::toParameterTree(config),
-                              duneuro::DataTree(storage));
-    return duneuro::toPyDict(storage->tree);
-  }
-
-private:
-  std::unique_ptr<Interface> driver_;
-  Dune::ParameterTree tree_;
-};
-
-template <int dim>
-static inline void register_tdcs_driver_interface(py::module& m)
-{
-  using Interface = PyTDCSDriverInterface<dim>;
-  std::stringstream classname;
-  classname << "TDCSDriver" << dim << "d";
-  py::class_<Interface>(m, classname.str().c_str())
-      .def(py::init<duneuro::PatchSet<double, dim>, py::dict>())
-      .def("makeDomainFunction", &Interface::makeDomainFunction, "create a domain function")
-      .def("write", [](Interface& instance, py::dict config) { instance.write(config); })
-      .def("write", [](Interface& instance, const duneuro::Function& solution,
-                       py::dict config) { instance.write(solution, config); })
-      .def("solveTDCSForward", &Interface::solveTDCSForward);
-}
-
-PYBIND11_PLUGIN(duneuropy)
-{
-  py::module m("duneuropy", "duneuropy library");
+	m.doc() = "duneuropy library";
 
   register_exceptions();
 
   register_function(m);
+
+  register_volume_vtk_writer(m);
 
   register_dense_matrix<double>(m);
 
@@ -758,8 +834,6 @@ PYBIND11_PLUGIN(duneuropy)
   register_meeg_driver_interface<2>(m);
   register_points_on_sphere<2>(m);
   register_point_vtk_writer<double, 2>(m);
-  register_patch_set<double, 2>(m);
-  register_tdcs_driver_interface<2>(m);
 #if HAVE_DUNE_UDG
   register_hexahedralize<2>(m);
   register_unfitted_statistics<2>(m);
@@ -774,13 +848,9 @@ PYBIND11_PLUGIN(duneuropy)
   register_meeg_driver_interface<3>(m);
   register_points_on_sphere<3>(m);
   register_point_vtk_writer<double, 3>(m);
-  register_patch_set<double, 3>(m);
-  register_tdcs_driver_interface<3>(m);
 #if HAVE_DUNE_UDG
   register_hexahedralize<3>(m);
   register_unfitted_statistics<3>(m);
 #endif
   duneuro::register_dipole_statistics<3>(m);
-
-  return m.ptr();
 }
