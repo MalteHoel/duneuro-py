@@ -6,7 +6,7 @@
 
 #Name of the module
 Module: duneuro-py
-Version: 2.5-dev
+Version: 2.10-dev
 Maintainer: andreas.nuessing@uni-muenster.de
 #depending on
-Depends: dune-common (>= 2.5) duneuro (>= 2.5)
+Depends: dune-common (>= 2.10) duneuro (>= 2.10)

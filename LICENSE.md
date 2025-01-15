@@ -8,6 +8,10 @@ Copyright holders
 |------------|----------------------------|
 | 2016--2018 | Andreas Nüßing             |
 | 2017       | Maria Carla Piastra        |
+| 2020       | Sophie Schrader            |
+| 2020--2025 | Christian Engwer           |
+| 2021--2025 | Malte Höltershinken        |
+| 2021       | Tim Erdbrügger             |
 
 License
 -------
