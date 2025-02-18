@@ -518,75 +518,77 @@ public:
   {
      driver_->print_citations();
   }
-  
-  py::dict constructRegularSourceSpace(const double gridSize, const std::vector<size_t> sourceCompartments, py::dict config)
-  {
-    std::pair<std::vector<typename Interface::CoordinateType>, std::vector<size_t>> sourceSpace = driver_->constructRegularSourceSpace(gridSize, sourceCompartments, duneuro::toParameterTree(config));
-    return py::dict("source_positions"_a = std::get<0>(sourceSpace), "element_indices"_a = std::get<1>(sourceSpace));
-  }
-  
-  py::dict placeSourcesZ(const double resolution, const double zHeight, const size_t compartmentLabel)
-  {
-    std::tuple<std::vector<typename Interface::CoordinateType>, 
-               std::vector<std::array<size_t, 2>>,
-               typename Interface::CoordinateType,
-               typename Interface::CoordinateType,
-               std::array<double, 2>> 
-      placedSources = driver_->placeSourcesZ(resolution, zHeight, compartmentLabel);
-    return py::dict("source_positions"_a = std::get<0>(placedSources), 
-                    "grid_indices"_a = std::get<1>(placedSources),
-                    "lower_left_corner"_a = std::get<2>(placedSources),
-                    "upper_right_corner"_a = std::get<3>(placedSources),
-                    "grid_delta"_a = std::get<4>(placedSources));
-  }
-  
-  py::dict placePositionsZ(const double resolution, const double zHeight)
-  {
-    std::tuple<std::vector<typename Interface::CoordinateType>, 
-               std::vector<std::array<size_t, 2>>,
-               typename Interface::CoordinateType,
-               typename Interface::CoordinateType,
-               std::array<double, 2>> 
-      placedPositions = driver_->placePositionsZ(resolution, zHeight);
-    return py::dict("positions"_a = std::get<0>(placedPositions), 
-                    "grid_indices"_a = std::get<1>(placedPositions),
-                    "lower_left_corner"_a = std::get<2>(placedPositions),
-                    "upper_right_corner"_a = std::get<3>(placedPositions),
-                    "grid_delta"_a = std::get<4>(placedPositions));
-  }
-  
-  std::vector<double> 
-    evaluateFunctionAtPositionsInsideMesh(
-      const duneuro::Function& function,
-      const std::vector<typename Interface::CoordinateType>& positions)
-  {
-    return driver_->evaluateFunctionAtPositionsInsideMesh(function, positions);
-  }
-  
-  std::vector<double> 
-    evaluateUInfinityAtPositions(
-      const typename Interface::DipoleType& dipole,
-      const std::vector<typename Interface::CoordinateType>& positions)
-  {
-    return driver_->evaluateUInfinityAtPositions(dipole, positions);
-  }
-  
-  std::vector<double> 
-    evaluateChiAtPositions(
-      const typename Interface::DipoleType& dipole,
-      const std::vector<typename Interface::CoordinateType>& positions,
-      py::dict configSourceModel,
-      py::dict configSolver)
-  {
-    return driver_->evaluateChiAtPositions(dipole, positions, duneuro::toParameterTree(configSourceModel), duneuro::toParameterTree(configSolver));
-  }
-  
-  std::vector<double> 
-    evaluateSigmaAtPositions(
-      const std::vector<typename Interface::CoordinateType>& positions)
-  {
-    return driver_->evaluateSigmaAtPositions(positions);
-  }
+
+/*  
++  py::dict constructRegularSourceSpace(const double gridSize, const std::vector<size_t> sourceCompartments, py::dict config)
++  {
++    std::pair<std::vector<typename Interface::CoordinateType>, std::vector<size_t>> sourceSpace = driver_->constructRegularSourceSpace(gridSize, sourceCompartments, +duneuro::toParameterTree(config));
++    return py::dict("source_positions"_a = std::get<0>(sourceSpace), "element_indices"_a = std::get<1>(sourceSpace));
++  }
++  
++  py::dict placeSourcesZ(const double resolution, const double zHeight, const size_t compartmentLabel)
++  {
++    std::tuple<std::vector<typename Interface::CoordinateType>, 
++               std::vector<std::array<size_t, 2>>,
++               typename Interface::CoordinateType,
++               typename Interface::CoordinateType,
++               std::array<double, 2>> 
++      placedSources = driver_->placeSourcesZ(resolution, zHeight, compartmentLabel);
++    return py::dict("source_positions"_a = std::get<0>(placedSources), 
++                    "grid_indices"_a = std::get<1>(placedSources),
++                    "lower_left_corner"_a = std::get<2>(placedSources),
++                    "upper_right_corner"_a = std::get<3>(placedSources),
++                    "grid_delta"_a = std::get<4>(placedSources));
++  }
++  
++  py::dict placePositionsZ(const double resolution, const double zHeight)
++  {
++    std::tuple<std::vector<typename Interface::CoordinateType>, 
++               std::vector<std::array<size_t, 2>>,
++               typename Interface::CoordinateType,
++               typename Interface::CoordinateType,
++               std::array<double, 2>> 
++      placedPositions = driver_->placePositionsZ(resolution, zHeight);
++    return py::dict("positions"_a = std::get<0>(placedPositions), 
++                    "grid_indices"_a = std::get<1>(placedPositions),
++                    "lower_left_corner"_a = std::get<2>(placedPositions),
++                    "upper_right_corner"_a = std::get<3>(placedPositions),
++                    "grid_delta"_a = std::get<4>(placedPositions));
++  }
++  
++  std::vector<double> 
++    evaluateFunctionAtPositionsInsideMesh(
++      const duneuro::Function& function,
++      const std::vector<typename Interface::CoordinateType>& positions)
++  {
++    return driver_->evaluateFunctionAtPositionsInsideMesh(function, positions);
++  }
++  
++  std::vector<double> 
++    evaluateUInfinityAtPositions(
++      const typename Interface::DipoleType& dipole,
++      const std::vector<typename Interface::CoordinateType>& positions)
++  {
++    return driver_->evaluateUInfinityAtPositions(dipole, positions);
++  }
++  
++  std::vector<double> 
++    evaluateChiAtPositions(
++      const typename Interface::DipoleType& dipole,
++      const std::vector<typename Interface::CoordinateType>& positions,
++      py::dict configSourceModel,
++      py::dict configSolver)
++  {
++    return driver_->evaluateChiAtPositions(dipole, positions, duneuro::toParameterTree(configSourceModel), duneuro::toParameterTree(configSolver));
++  }
++  
++  std::vector<double> 
++    evaluateSigmaAtPositions(
++      const std::vector<typename Interface::CoordinateType>& positions)
++  {
++    return driver_->evaluateSigmaAtPositions(positions);
++  }
+*/
 
 private:
   std::unique_ptr<Interface> driver_;
@@ -770,13 +772,13 @@ solve the eeg forward problem and store the result in the given function
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
       .def("computeMEGPrimaryField", &Interface::computeMEGPrimaryField, "compute the primary B field for the given dipoles", py::arg("dipoles"), py::arg("config"))
       .def("statistics", &Interface::statistics, "compute driver statistics")
-      .def("constructRegularSourceSpace", &Interface::constructRegularSourceSpace, "construct regular volumetric source space for a given volume conductor and source compartments")
-      .def("placeSourcesZ", &Interface::placeSourcesZ, "place sources in the xy-plane at some user specified height")
-      .def("placePositionsZ", &Interface::placePositionsZ, "place positions in the xy-plane at some user specified height")
-      .def("evaluateFunctionAtPositionsInsideMesh", &Interface::evaluateFunctionAtPositionsInsideMesh, "evaluate the given function at some predefined positions inside the volume conductor")
-      .def("evaluateUInfinityAtPositions", &Interface::evaluateUInfinityAtPositions, "evaluate the infinity potential of some dipole at predefined positions")
-      .def("evaluateChiAtPositions", &Interface::evaluateChiAtPositions, "evaluate the cutoff function chi of some dipole at predefined positions")
-      .def("evaluateSigmaAtPositions", &Interface::evaluateSigmaAtPositions, "evaluate the conductivity of the volume conductor at predefined positions")
+//      .def("constructRegularSourceSpace", &Interface::constructRegularSourceSpace, "construct regular volumetric source space for a given volume conductor and source compartments")
+//      .def("placeSourcesZ", &Interface::placeSourcesZ, "place sources in the xy-plane at some user specified height")
+//      .def("placePositionsZ", &Interface::placePositionsZ, "place positions in the xy-plane at some user specified height")
+//      .def("evaluateFunctionAtPositionsInsideMesh", &Interface::evaluateFunctionAtPositionsInsideMesh, "evaluate the given function at some predefined positions inside the volume conductor")
+//      .def("evaluateUInfinityAtPositions", &Interface::evaluateUInfinityAtPositions, "evaluate the infinity potential of some dipole at predefined positions")
+//      .def("evaluateChiAtPositions", &Interface::evaluateChiAtPositions, "evaluate the cutoff function chi of some dipole at predefined positions")
+//      .def("evaluateSigmaAtPositions", &Interface::evaluateSigmaAtPositions, "evaluate the conductivity of the volume conductor at predefined positions")
       .def("print_citations", &Interface::print_citations, "list relevant publications");
 }
 
