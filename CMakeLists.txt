@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright © duneuro-py contributors, see file LICENSE.md in module root
+# SPDX-License-Identifier: LicenseRef-GPL-2.0-only-with-duneuro-py-exception OR LGPL-3.0-or-later
 cmake_minimum_required(VERSION 2.8.12)
 project(duneuro-py CXX)
 

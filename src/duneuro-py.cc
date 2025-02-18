@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: Copyright © duneuro-py contributors, see file LICENSE.md in module root
+// SPDX-License-Identifier: LicenseRef-GPL-2.0-only-with-duneuro-py-exception OR LGPL-3.0-or-later OR GPL-3.0-or-later
 #if HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -24,9 +26,6 @@
 #include <duneuro/driver/driver_interface.hh>
 #include <duneuro/py/dipole_statistics.hh>
 #include <duneuro/py/parameter_tree.h>
-#include <duneuro/tes/patch_set.hh>
-#include <duneuro/tes/tdcs_driver_factory.hh>
-#include <duneuro/tes/tdcs_driver_interface.hh>
 #if HAVE_DUNE_UDG
 #include <duneuro/udg/hexahedralization.hh>
 #include <duneuro/udg/unfitted_statistics.hh>
@@ -506,6 +505,62 @@ public:
   {
     return driver_->computeMEGPrimaryField(dipoles, duneuro::toParameterTree(config));
   }
+  
+  std::vector<typename Interface::CoordinateType>
+  createSourceSpace(py::dict config)
+  {
+    return driver_->createSourceSpace(duneuro::toParameterTree(config));
+  }
+
+  std::pair<duneuro::DenseMatrix<double>*, py::dict>
+  solveTDCSForward(py::dict config)  
+  {
+    auto storage = std::make_shared<ParameterTreeStorage>();
+    std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->solveTDCSForward(duneuro::toParameterTree(config), duneuro::DataTree(storage));
+    return {result.release(), duneuro::toPyDict(storage->tree)};
+  }
+  
+  std::pair<duneuro::DenseMatrix<double>*, py::dict>
+  evaluateMultipleFunctionsAtPositions(py::buffer buffer,
+                                       const std::vector<typename Interface::CoordinateType>& positions,
+                                       py::dict config) const  
+  {
+    auto evaluationMatrix = toDenseMatrix(buffer);
+    auto storage = std::make_shared<ParameterTreeStorage>();
+    std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->evaluateMultipleFunctionsAtPositions(*evaluationMatrix, positions,  duneuro::toParameterTree(config));
+    return {result.release(), duneuro::toPyDict(storage->tree)};
+  }
+ 
+
+  std::pair<duneuro::DenseMatrix<double>*, py::dict>
+  evaluateMultipleFunctionsAtElementCenters(py::buffer buffer,
+                                            py::dict config) const  
+  {
+    auto evaluationMatrix = toDenseMatrix(buffer);
+    auto storage = std::make_shared<ParameterTreeStorage>();
+    std::unique_ptr<duneuro::DenseMatrix<double>> result = driver_->evaluateMultipleFunctionsAtElementCenters(*evaluationMatrix,  duneuro::toParameterTree(config));
+    return {result.release(), duneuro::toPyDict(storage->tree)};
+  }
+
+  py::dict elementStatistics() const
+  {
+    std::tuple<std::vector<typename Interface::CoordinateType>,
+               std::vector<double>,
+               std::optional<std::vector<std::size_t>>> elementStats = driver_->elementStatistics();
+    std::optional<std::vector<std::size_t>> elementLabelsOpt = std::get<2>(elementStats);
+    
+    // since for unfitted methods elements can contain more than one compartment, we can in general only
+    // assign a unique label to each element in the fitted case
+    if(elementLabelsOpt.has_value()) {
+      return py::dict("elementCenters"_a = std::get<0>(elementStats),
+                      "elementVolumes"_a = std::get<1>(elementStats),
+                      "elementLabels"_a = elementLabelsOpt.value());
+    }
+    else {
+      return py::dict("elementCenters"_a = std::get<0>(elementStats),
+                      "elementVolumes"_a = std::get<1>(elementStats));
+    }
+  }
 
   py::dict statistics()
   {
@@ -518,77 +573,45 @@ public:
   {
      driver_->print_citations();
   }
-
-/*  
-+  py::dict constructRegularSourceSpace(const double gridSize, const std::vector<size_t> sourceCompartments, py::dict config)
-+  {
-+    std::pair<std::vector<typename Interface::CoordinateType>, std::vector<size_t>> sourceSpace = driver_->constructRegularSourceSpace(gridSize, sourceCompartments, +duneuro::toParameterTree(config));
-+    return py::dict("source_positions"_a = std::get<0>(sourceSpace), "element_indices"_a = std::get<1>(sourceSpace));
-+  }
-+  
-+  py::dict placeSourcesZ(const double resolution, const double zHeight, const size_t compartmentLabel)
-+  {
-+    std::tuple<std::vector<typename Interface::CoordinateType>, 
-+               std::vector<std::array<size_t, 2>>,
-+               typename Interface::CoordinateType,
-+               typename Interface::CoordinateType,
-+               std::array<double, 2>> 
-+      placedSources = driver_->placeSourcesZ(resolution, zHeight, compartmentLabel);
-+    return py::dict("source_positions"_a = std::get<0>(placedSources), 
-+                    "grid_indices"_a = std::get<1>(placedSources),
-+                    "lower_left_corner"_a = std::get<2>(placedSources),
-+                    "upper_right_corner"_a = std::get<3>(placedSources),
-+                    "grid_delta"_a = std::get<4>(placedSources));
-+  }
-+  
-+  py::dict placePositionsZ(const double resolution, const double zHeight)
-+  {
-+    std::tuple<std::vector<typename Interface::CoordinateType>, 
-+               std::vector<std::array<size_t, 2>>,
-+               typename Interface::CoordinateType,
-+               typename Interface::CoordinateType,
-+               std::array<double, 2>> 
-+      placedPositions = driver_->placePositionsZ(resolution, zHeight);
-+    return py::dict("positions"_a = std::get<0>(placedPositions), 
-+                    "grid_indices"_a = std::get<1>(placedPositions),
-+                    "lower_left_corner"_a = std::get<2>(placedPositions),
-+                    "upper_right_corner"_a = std::get<3>(placedPositions),
-+                    "grid_delta"_a = std::get<4>(placedPositions));
-+  }
-+  
-+  std::vector<double> 
-+    evaluateFunctionAtPositionsInsideMesh(
-+      const duneuro::Function& function,
-+      const std::vector<typename Interface::CoordinateType>& positions)
-+  {
-+    return driver_->evaluateFunctionAtPositionsInsideMesh(function, positions);
-+  }
-+  
-+  std::vector<double> 
-+    evaluateUInfinityAtPositions(
-+      const typename Interface::DipoleType& dipole,
-+      const std::vector<typename Interface::CoordinateType>& positions)
-+  {
-+    return driver_->evaluateUInfinityAtPositions(dipole, positions);
-+  }
-+  
-+  std::vector<double> 
-+    evaluateChiAtPositions(
-+      const typename Interface::DipoleType& dipole,
-+      const std::vector<typename Interface::CoordinateType>& positions,
-+      py::dict configSourceModel,
-+      py::dict configSolver)
-+  {
-+    return driver_->evaluateChiAtPositions(dipole, positions, duneuro::toParameterTree(configSourceModel), duneuro::toParameterTree(configSolver));
-+  }
-+  
-+  std::vector<double> 
-+    evaluateSigmaAtPositions(
-+      const std::vector<typename Interface::CoordinateType>& positions)
-+  {
-+    return driver_->evaluateSigmaAtPositions(positions);
-+  }
-*/
+   
+  py::dict placePositionsZ(const double resolution, const double zHeight)
+  {
+    std::tuple<std::vector<typename Interface::CoordinateType>, 
+               std::vector<std::array<size_t, 2>>,
+               typename Interface::CoordinateType,
+               typename Interface::CoordinateType,
+               std::array<double, 2>> 
+    placedPositions = driver_->placePositionsZ(resolution, zHeight);
+    return py::dict("positions"_a = std::get<0>(placedPositions), 
+                    "grid_indices"_a = std::get<1>(placedPositions),
+                    "lower_left_corner"_a = std::get<2>(placedPositions),
+                    "upper_right_corner"_a = std::get<3>(placedPositions),
+                    "grid_delta"_a = std::get<4>(placedPositions));
+  }
+  
+  std::vector<double> 
+  evaluateUInfinityAtPositions(
+    const typename Interface::DipoleType& dipole,
+    const std::vector<typename Interface::CoordinateType>& positions)
+  {
+    return driver_->evaluateUInfinityAtPositions(dipole, positions);
+  }
+  
+  std::vector<double> 
+  evaluateChiAtPositions(
+    const typename Interface::DipoleType& dipole,
+    const std::vector<typename Interface::CoordinateType>& positions,
+    py::dict configSourceModel,
+    py::dict configSolver)
+  {
+    return driver_->evaluateChiAtPositions(dipole, positions, duneuro::toParameterTree(configSourceModel), duneuro::toParameterTree(configSolver));
+  }
+  
+  std::vector<double> 
+  evaluateSigmaAtPositions(const std::vector<typename Interface::CoordinateType>& positions)
+  {
+    return driver_->evaluateSigmaAtPositions(positions);
+  }
 
 private:
   std::unique_ptr<Interface> driver_;
@@ -770,8 +793,14 @@ solve the eeg forward problem and store the result in the given function
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
       .def("applyMEGTransfer", &Interface::applyMEGTransfer, "apply the meg transfer matrix",
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
+      .def("createSourceSpace", &Interface::createSourceSpace, "create a volumetric source grid", py::arg("config"))
+      .def("solveTDCSForward", &Interface::solveTDCSForward, "solve the TDCS forward problem")
+      .def("evaluateMultipleFunctionsAtPositions", &Interface::evaluateMultipleFunctionsAtPositions, "evaluate multiple functions, given as the rows of a matrix, at predefined positions")
+      .def("evaluateMultipleFunctionsAtElementCenters", &Interface::evaluateMultipleFunctionsAtElementCenters, "evaluate multiple functions, given as the rows of a matrix, at element centers")
+      .def("elementStatistics", &Interface::elementStatistics, "return the element centers")
       .def("computeMEGPrimaryField", &Interface::computeMEGPrimaryField, "compute the primary B field for the given dipoles", py::arg("dipoles"), py::arg("config"))
       .def("statistics", &Interface::statistics, "compute driver statistics")
+<<<<<<< HEAD
 //      .def("constructRegularSourceSpace", &Interface::constructRegularSourceSpace, "construct regular volumetric source space for a given volume conductor and source compartments")
 //      .def("placeSourcesZ", &Interface::placeSourcesZ, "place sources in the xy-plane at some user specified height")
 //      .def("placePositionsZ", &Interface::placePositionsZ, "place positions in the xy-plane at some user specified height")
@@ -779,6 +808,8 @@ solve the eeg forward problem and store the result in the given function
 //      .def("evaluateUInfinityAtPositions", &Interface::evaluateUInfinityAtPositions, "evaluate the infinity potential of some dipole at predefined positions")
 //      .def("evaluateChiAtPositions", &Interface::evaluateChiAtPositions, "evaluate the cutoff function chi of some dipole at predefined positions")
 //      .def("evaluateSigmaAtPositions", &Interface::evaluateSigmaAtPositions, "evaluate the conductivity of the volume conductor at predefined positions")
+=======
+>>>>>>> 9c6bcf1f187e7f39699545a696b9413c6cb32908
       .def("print_citations", &Interface::print_citations, "list relevant publications");
 }
 
@@ -832,70 +863,6 @@ static inline void register_point_vtk_writer(py::module& m)
            "write the data to vtk");
 }
 
-template <class T, int dim>
-static inline void register_patch_set(py::module& m)
-{
-  using PS = duneuro::PatchSet<T, dim>;
-  std::stringstream name;
-  name << "PatchSet" << dim << "d";
-  py::class_<PS>(m, name.str().c_str()).def(py::init([](py::dict d) {
-    return PS(duneuro::toParameterTree(d));
-  }));
-}
-
-template <int dim>
-class PyTDCSDriverInterface
-{
-public:
-  using Interface = duneuro::TDCSDriverInterface<dim>;
-  explicit PyTDCSDriverInterface(const duneuro::PatchSet<double, dim>& patchSet, py::dict d)
-  {
-    duneuro::TDCSDriverData<dim> data;
-#if HAVE_DUNE_UDG
-    data.udgData = extractUnfittedDataFromMainDict<dim>(d);
-#endif
-    duneuro::extractFittedDataFromMainDict(d, data.fittedData);
-    driver_ = duneuro::TDCSDriverFactory<dim>::make_tdcs_driver(patchSet,
-                                                                duneuro::toParameterTree(d), data);
-  }
-
-  std::unique_ptr<duneuro::Function> makeDomainFunction() const
-  {
-    return driver_->makeDomainFunction();
-  }
-
-  VolumeVTKWriter volumeConductorVTKWriter(py::dict config)
-  {
-    return VolumeVTKWriter(driver_->volumeConductorVTKWriter(duneuro::toParameterTree(config)));
-  }
-
-  py::dict solveTDCSForward(duneuro::Function& solution, py::dict config) const
-  {
-    int verbose = config.contains("solver") && config["solver"].contains("verbose") ? py::int_(config["solver"]["verbose"]).cast<int>() : 0;
-    auto storage = std::make_shared<ParameterTreeStorage>(verbose);
-    driver_->solveTDCSForward(solution, duneuro::toParameterTree(config),
-                              duneuro::DataTree(storage));
-    return duneuro::toPyDict(storage->tree);
-  }
-
-private:
-  std::unique_ptr<Interface> driver_;
-  Dune::ParameterTree tree_;
-};
-
-template <int dim>
-static inline void register_tdcs_driver_interface(py::module& m)
-{
-  using Interface = PyTDCSDriverInterface<dim>;
-  std::stringstream classname;
-  classname << "TDCSDriver" << dim << "d";
-  py::class_<Interface>(m, classname.str().c_str())
-      .def(py::init<duneuro::PatchSet<double, dim>, py::dict>())
-      .def("makeDomainFunction", &Interface::makeDomainFunction, "create a domain function")
-      .def("volumeConductorVTKWriter", &Interface::volumeConductorVTKWriter, "return a VTK writer for this volume conductor")
-      .def("solveTDCSForward", &Interface::solveTDCSForward);
-}
-
 PYBIND11_MODULE(duneuropy, m)
 {
 	m.doc() = "duneuropy library";
@@ -916,8 +883,6 @@ PYBIND11_MODULE(duneuropy, m)
   register_meeg_driver_interface<2>(m);
   register_points_on_sphere<2>(m);
   register_point_vtk_writer<double, 2>(m);
-  register_patch_set<double, 2>(m);
-  register_tdcs_driver_interface<2>(m);
 #if HAVE_DUNE_UDG
   register_hexahedralize<2>(m);
   register_unfitted_statistics<2>(m);
@@ -932,8 +897,6 @@ PYBIND11_MODULE(duneuropy, m)
   register_meeg_driver_interface<3>(m);
   register_points_on_sphere<3>(m);
   register_point_vtk_writer<double, 3>(m);
-  register_patch_set<double, 3>(m);
-  register_tdcs_driver_interface<3>(m);
 #if HAVE_DUNE_UDG
   register_hexahedralize<3>(m);
   register_unfitted_statistics<3>(m);

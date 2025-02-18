@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: Copyright © duneuro-py contributors, see file LICENSE.md in module root
+# SPDX-License-Identifier: LicenseRef-GPL-2.0-only-with-duneuro-py-exception OR LGPL-3.0-or-later
+
+# we test compilation and functionality directly in the DUNEuro CI
+stages:
+  - .pre
+
+########################
+# .pre stage tests
+########################
+
+# Check spelling
+code-spelling-check:
+  stage: .pre
+  image: registry.dune-project.org/docker/ci/debian:12
+  tags: [duneuroci-spelling-check]
+  script:
+   - codespell
+     --ignore-words-list nin,elemente --skip="./.git/*"
+
+# Check licensing
+reuse:
+  stage: .pre
+  image:
+    name: docker.io/fsfe/reuse:latest
+    entrypoint: [""]
+  tags: [duneuroci-license-check]
+  script:
+    - reuse lint
+
