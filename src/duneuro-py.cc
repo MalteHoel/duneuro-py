@@ -520,6 +520,14 @@ public:
     return {result.release(), duneuro::toPyDict(storage->tree)};
   }
   
+  std::vector<double>
+  evaluateFunctionAtPositions(const duneuro::Function& function, 
+                              const std::vector<typename Interface::CoordinateType>& positions, 
+                              py::dict config)
+  {
+    return driver_->evaluateFunctionAtPositions(function, positions, duneuro::toParameterTree(config));
+  }
+  
   std::pair<duneuro::DenseMatrix<double>*, py::dict>
   evaluateMultipleFunctionsAtPositions(py::buffer buffer,
                                        const std::vector<typename Interface::CoordinateType>& positions,
@@ -572,6 +580,45 @@ public:
   void print_citations()
   {
      driver_->print_citations();
+  }
+   
+  py::dict placePositionsZ(const double resolution, const double zHeight)
+  {
+    std::tuple<std::vector<typename Interface::CoordinateType>, 
+               std::vector<std::array<size_t, dim-1>>,
+               typename Interface::CoordinateType,
+               typename Interface::CoordinateType,
+               std::array<double, dim-1>> 
+    placedPositions = driver_->placePositionsZ(resolution, zHeight);
+    return py::dict("positions"_a = std::get<0>(placedPositions), 
+                    "grid_indices"_a = std::get<1>(placedPositions),
+                    "lower_left_corner"_a = std::get<2>(placedPositions),
+                    "upper_right_corner"_a = std::get<3>(placedPositions),
+                    "grid_delta"_a = std::get<4>(placedPositions));
+  }
+  
+  std::vector<double> 
+  evaluateUInfinityAtPositions(
+    const typename Interface::DipoleType& dipole,
+    const std::vector<typename Interface::CoordinateType>& positions)
+  {
+    return driver_->evaluateUInfinityAtPositions(dipole, positions);
+  }
+  
+  std::vector<double> 
+  evaluateChiAtPositions(
+    const typename Interface::DipoleType& dipole,
+    const std::vector<typename Interface::CoordinateType>& positions,
+    py::dict configSourceModel,
+    py::dict configSolver)
+  {
+    return driver_->evaluateChiAtPositions(dipole, positions, duneuro::toParameterTree(configSourceModel), duneuro::toParameterTree(configSolver));
+  }
+  
+  std::vector<double> 
+  evaluateSigmaAtPositions(const std::vector<typename Interface::CoordinateType>& positions)
+  {
+    return driver_->evaluateSigmaAtPositions(positions);
   }
 
 private:
@@ -756,11 +803,16 @@ solve the eeg forward problem and store the result in the given function
            py::arg("matrix"), py::arg("dipoles"), py::arg("config"))
       .def("createSourceSpace", &Interface::createSourceSpace, "create a volumetric source grid", py::arg("config"))
       .def("solveTDCSForward", &Interface::solveTDCSForward, "solve the TDCS forward problem")
+      .def("evaluateFunctionAtPositions", &Interface::evaluateFunctionAtPositions, "evaluate a function, given as a domain function, at predefined positions")
       .def("evaluateMultipleFunctionsAtPositions", &Interface::evaluateMultipleFunctionsAtPositions, "evaluate multiple functions, given as the rows of a matrix, at predefined positions")
       .def("evaluateMultipleFunctionsAtElementCenters", &Interface::evaluateMultipleFunctionsAtElementCenters, "evaluate multiple functions, given as the rows of a matrix, at element centers")
       .def("elementStatistics", &Interface::elementStatistics, "return the element centers")
       .def("computeMEGPrimaryField", &Interface::computeMEGPrimaryField, "compute the primary B field for the given dipoles", py::arg("dipoles"), py::arg("config"))
       .def("statistics", &Interface::statistics, "compute driver statistics")
+      .def("placePositionsZ", &Interface::placePositionsZ, "place positions in the xy-plane at some user specified height")
+      .def("evaluateUInfinityAtPositions", &Interface::evaluateUInfinityAtPositions, "evaluate the infinity potential of some dipole at predefined positions")
+      .def("evaluateChiAtPositions", &Interface::evaluateChiAtPositions, "evaluate the cutoff function chi of some dipole at predefined positions")
+      .def("evaluateSigmaAtPositions", &Interface::evaluateSigmaAtPositions, "evaluate the conductivity of the volume conductor at predefined positions")
       .def("print_citations", &Interface::print_citations, "list relevant publications");
 }
 
